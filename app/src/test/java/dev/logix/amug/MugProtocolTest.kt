@@ -36,5 +36,12 @@ class MugProtocolTest {
         assertArrayEquals(byteArrayOf(0x04, 54, 44), MugProtocol.setTemperature(54.44))
         assertArrayEquals(byteArrayOf(0x06, 3), MugProtocol.setS6PlusGear(3))
         assertArrayEquals(byteArrayOf(0x05, 2), MugProtocol.setS6Gear(2))
+        assertArrayEquals(byteArrayOf(0x07, 0x12, 0x34, 0x56, 1), MugProtocol.setNightLight(0x123456, true))
+    }
+
+    @Test fun mapsTemperatureToLedGradient() {
+        assertEquals(0x2388FF, MugProtocol.temperatureColor(20.0))
+        assertEquals(0xF33232, MugProtocol.temperatureColor(66.0))
+        assertTrue(MugProtocol.temperatureColor(52.0) != MugProtocol.temperatureColor(35.0))
     }
 }

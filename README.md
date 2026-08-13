@@ -54,18 +54,22 @@ Status request `03`, firmware request `02`. On connect the app sends `02` then `
 
 ```
 byte  0  opcode (echo 03)
-byte  4  flags: bit0 heating/workState, bit2 preventDryBurn+empty, bit4 charging
-byte  6  curTC  = int(6,2)  + int(8,2) /100     (2 decimals)
-byte 10  holdTC = int(10,2) + int(12,2)/100
-byte 14  securityWaitHours (255 = reset)
-byte 16  lightColor = "#" + substr(16,6)  (RRGGBB)
-byte 22  lightMode
-byte 24  battery (%)
-byte 28  batteryTempVolt = (28<<8)+30
-byte 32  batteryVolt     = (32<<8)+34
-byte 36  holdLightMode
-byte 38  chargeLightMode
-byte 40  nightLightSwitch
+byte  1  unused / unknown
+byte  2  flags: bit0 heating/workState, bit2 preventDryBurn+empty, bit4 charging
+byte  3  current temperature integer part
+byte  4  current temperature hundredths
+byte  5  target temperature integer part
+byte  6  target temperature hundredths
+byte  7  securityWaitHours (255 = reset)
+bytes 8-10 light color (RRGGBB)
+byte 11  light mode
+byte 12  battery (%)
+byte 13  unused / unknown
+bytes 14-15 battery-temperature ADC voltage (big-endian)
+bytes 16-17 battery voltage (big-endian)
+byte 18  hold-light mode
+byte 19  charge-light mode
+byte 20  night-light switch
 ```
 
 ### Commands (all via write to CHAR[0])
@@ -123,11 +127,14 @@ Other notify ops: `02`→firmware/hw, `16`(→`10`)→MAC, `20`→AI self-heatin
 AMUG now includes a native Kotlin app built for modern Pixels:
 
 - Target / compile SDK 36 (Android 16)
-- Jetpack Compose + Material 3, edge-to-edge
+- Jetpack Compose + Material 3 Expressive direction, edge-to-edge
+- Pixel Material You dynamic color with automatic light/dark themes
 - Nearby Devices permissions only; no Internet permission
 - Broad Android BLE scan with `S6-PLUS-XXXX` name detection
 - Native GATT connection, notification setup, and serialized writes
 - Live temperature, target, battery, charging, heating, and empty-state display
+- Fahrenheit by default with a persistent °F/°C switch
+- Optional temperature-responsive physical RGB LED
 - S6 Plus custom temperature + gear controls
 - Plain S6 status, heat switch, and low/medium/high preset controls
 
@@ -144,8 +151,13 @@ The debug APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 - [x] BLE protocol extracted and documented
 - [x] Native Android 16 Material 3 app
 - [x] Protocol unit tests and Android lint
-- [ ] Physical mug validation and packet captures
+- [x] Pixel 10 Pro XL install and cold-launch test
+- [x] S6 Plus scan, GATT connect, and live telemetry validation
+- [ ] Validate every write command safely on physical hardware
 - [ ] Home Assistant / MQTT bridge
+
+See [ROADMAP.md](ROADMAP.md) for planned revisions and
+[HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md) for test evidence.
 
 ## Extracted artifacts
 

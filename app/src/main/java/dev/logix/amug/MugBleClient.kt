@@ -43,6 +43,8 @@ class MugBleClient(
     private var writeCharacteristic: BluetoothGattCharacteristic? = null
     private var pendingWrites = ArrayDeque<ByteArray>()
     private var writing = false
+    private var temperatureLedEnabled = true
+    private var lastTemperatureColor: Int? = null
     private val found = linkedMapOf<String, MugDevice>()
 
     private val scanCallback = object : ScanCallback() {
@@ -163,6 +165,13 @@ class MugBleClient(
         )
     }
 
+    fun setTemperatureLedEnabled(enabled: Boolean) {
+        temperatureLedEnabled = enabled
+        lastTemperatureColor = null
+        if (!enabled && profile == MugProfile.S6_PLUS) enqueue(MugProtocol.setNightLight(0, false))
+        if (enabled) state.status?.let(::syncTemperatureLed)
+    }
+
     fun refresh() = enqueue(MugProtocol.requestStatus)
 
     fun disconnect() {
@@ -203,7 +212,18 @@ class MugBleClient(
             MugProfile.S6 -> MugProtocol.parseS6Status(value)
             null -> null
         }
-        status?.let { update(state.copy(status = it, stage = ConnectionStage.READY)) }
+        status?.let {
+            update(state.copy(status = it, stage = ConnectionStage.READY))
+            syncTemperatureLed(it)
+        }
+    }
+
+    private fun syncTemperatureLed(status: MugStatus) {
+        if (!temperatureLedEnabled || profile != MugProfile.S6_PLUS) return
+        val color = MugProtocol.temperatureColor(status.currentC)
+        if (color == lastTemperatureColor) return
+        lastTemperatureColor = color
+        enqueue(MugProtocol.setNightLight(color, true))
     }
 
     private fun fail(message: String) {
@@ -218,6 +238,7 @@ class MugBleClient(
         writeCharacteristic = null
         pendingWrites.clear()
         writing = false
+        lastTemperatureColor = null
     }
 
     private fun update(next: BleState) { state = next; onState(next) }

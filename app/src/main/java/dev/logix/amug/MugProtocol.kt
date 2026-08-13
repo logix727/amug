@@ -82,5 +82,35 @@ object MugProtocol {
     fun setS6PlusGear(gear: Int) = byteArrayOf(0x06, gear.coerceIn(0, 3).toByte())
     fun setS6Gear(gear: Int) = byteArrayOf(0x05, gear.coerceIn(0, 3).toByte())
 
+    fun setNightLight(color: Int, enabled: Boolean) = byteArrayOf(
+        0x07,
+        (color shr 16).toByte(),
+        (color shr 8).toByte(),
+        color.toByte(),
+        if (enabled) 1 else 0,
+    )
+
+    fun temperatureColor(celsius: Double): Int {
+        val stops = listOf(
+            20.0 to 0x2388FF,
+            35.0 to 0x24C8FF,
+            45.0 to 0x62D96B,
+            52.0 to 0xFFD04A,
+            59.0 to 0xFF7A32,
+            66.0 to 0xF33232,
+        )
+        val value = celsius.coerceIn(stops.first().first, stops.last().first)
+        val upperIndex = stops.indexOfFirst { value <= it.first }.coerceAtLeast(1)
+        val (lowTemp, lowColor) = stops[upperIndex - 1]
+        val (highTemp, highColor) = stops[upperIndex]
+        val ratio = (value - lowTemp) / (highTemp - lowTemp)
+        fun channel(shift: Int): Int {
+            val low = lowColor shr shift and 0xff
+            val high = highColor shr shift and 0xff
+            return (low + (high - low) * ratio).roundToInt().coerceIn(0, 255)
+        }
+        return (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+    }
+
     private fun Byte.u8() = toInt() and 0xff
 }
