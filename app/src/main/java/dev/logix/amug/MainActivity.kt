@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -25,6 +26,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -38,6 +41,7 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -82,6 +86,7 @@ class MainActivity : ComponentActivity() {
         if (grants.values.all { it }) ensureBluetoothThenScan()
     }
     private val bluetoothLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { viewModel.scan() }
+    private val notificationLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,9 +95,19 @@ class MainActivity : ComponentActivity() {
             AmugTheme {
                 val state by viewModel.state.collectAsState()
                 val preferences by viewModel.preferences.collectAsState()
+                val mugs by viewModel.mugs.collectAsState()
+                val selectedMug by viewModel.selectedMug.collectAsState()
+                val presets by viewModel.presets.collectAsState()
+                val sessions by viewModel.sessions.collectAsState()
+                val globalPreferences by viewModel.globalPreferences.collectAsState()
                 AmugApp(
                     state,
                     preferences,
+                    mugs,
+                    selectedMug,
+                    presets,
+                    sessions,
+                    globalPreferences.historyRetentionDays,
                     ::startScan,
                     viewModel::connect,
                     viewModel::setTemperature,
@@ -103,21 +118,35 @@ class MainActivity : ComponentActivity() {
                     viewModel::setLedColor,
                     viewModel::resetLedPalette,
                     viewModel::setSafetyWait,
+                    viewModel::setMusicMode,
+                    viewModel::setHoldLight,
+                    viewModel::setChargeLight,
+                    viewModel::setSleepTimer,
                     viewModel::refresh,
+                    viewModel::selectMug,
+                    viewModel::renameMug,
+                    viewModel::forgetMug,
+                    viewModel::clearHistory,
+                    viewModel::setHistoryRetention,
                 )
             }
         }
         val permissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
         val adapter = getSystemService(android.bluetooth.BluetoothManager::class.java).adapter
-        if (permissions.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED } && adapter.isEnabled) {
-            viewModel.connectLast()
-        }
+        if (permissions.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED } && adapter.isEnabled) requestNotificationPermission()
     }
 
     private fun startScan() {
+        requestNotificationPermission()
         val permissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
         if (permissions.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) ensureBluetoothThenScan()
         else permissionLauncher.launch(permissions)
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     private fun ensureBluetoothThenScan() {
@@ -142,6 +171,11 @@ private fun AmugTheme(content: @Composable () -> Unit) {
 private fun AmugApp(
     state: BleState,
     preferences: UserPreferences,
+    mugs: List<MugEntity>,
+    selectedMug: MugEntity?,
+    presets: List<PresetEntity>,
+    sessions: List<MugSessionEntity>,
+    historyRetentionDays: Int,
     scan: () -> Unit,
     connect: (MugDevice) -> Unit,
     setTemperature: (Double) -> Unit,
@@ -152,8 +186,18 @@ private fun AmugApp(
     setLedColor: (Int, Int) -> Unit,
     resetLedPalette: () -> Unit,
     setSafetyWait: (Int) -> Unit,
+    setMusicMode: (Int?) -> Unit,
+    setHoldLight: (Boolean) -> Unit,
+    setChargeLight: (Boolean) -> Unit,
+    setSleepTimer: (Int?) -> Unit,
     refresh: () -> Unit,
+    selectMug: (Long) -> Unit,
+    renameMug: (Long, String) -> Unit,
+    forgetMug: (Long) -> Unit,
+    clearHistory: () -> Unit,
+    setHistoryRetention: (Int) -> Unit,
 ) {
+    var showMugs by remember { mutableStateOf(false) }
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         Box(
             Modifier.fillMaxSize().background(
@@ -164,20 +208,22 @@ private fun AmugApp(
             ).padding(padding),
         ) {
             AnimatedContent(state.stage == ConnectionStage.READY, label = "screen") { connected ->
-                if (connected) ControlScreen(state, preferences, setTemperature, setHeating, setGear, setUnit, setTemperatureLed, setLedColor, resetLedPalette, setSafetyWait, refresh)
-                else DiscoveryScreen(state, scan, connect)
+                if (connected) ControlScreen(state, preferences, presets, setTemperature, setHeating, setGear, setUnit, setTemperatureLed, setLedColor, resetLedPalette, setSafetyWait, setMusicMode, setHoldLight, setChargeLight, setSleepTimer, refresh, { showMugs = true })
+                else DiscoveryScreen(state, scan, connect, { showMugs = true })
             }
         }
     }
+    if (showMugs) MugManagerDialog(mugs, selectedMug?.id, sessions, historyRetentionDays, selectMug, renameMug, forgetMug, clearHistory, setHistoryRetention) { showMugs = false }
 }
 
 @Composable
-private fun DiscoveryScreen(state: BleState, scan: () -> Unit, connect: (MugDevice) -> Unit) {
+private fun DiscoveryScreen(state: BleState, scan: () -> Unit, connect: (MugDevice) -> Unit, manageMugs: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 28.dp)) {
         Text("AMUG", fontSize = 14.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary, letterSpacing = 4.sp)
         Spacer(Modifier.height(10.dp))
         Text("Coffee, held\nexactly right.", fontSize = 42.sp, lineHeight = 44.sp, fontWeight = FontWeight.Bold)
         Text("Local Bluetooth control. No login. No cloud.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 14.dp))
+        TextButton(onClick = manageMugs) { Icon(Icons.Rounded.Devices, null); Text("  My mugs") }
         Button(onClick = scan, modifier = Modifier.padding(top = 28.dp).height(56.dp), shape = RoundedCornerShape(20.dp)) {
             Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, null)
             Text(if (state.stage == ConnectionStage.SCANNING) "  Scanning nearby" else "  Find my mug", fontWeight = FontWeight.Bold)
@@ -218,6 +264,7 @@ private fun DiscoveryScreen(state: BleState, scan: () -> Unit, connect: (MugDevi
 private fun ControlScreen(
     state: BleState,
     preferences: UserPreferences,
+    presets: List<PresetEntity>,
     setTemperature: (Double) -> Unit,
     setHeating: (Boolean) -> Unit,
     setGear: (Int) -> Unit,
@@ -226,7 +273,12 @@ private fun ControlScreen(
     setLedColor: (Int, Int) -> Unit,
     resetLedPalette: () -> Unit,
     setSafetyWait: (Int) -> Unit,
+    setMusicMode: (Int?) -> Unit,
+    setHoldLight: (Boolean) -> Unit,
+    setChargeLight: (Boolean) -> Unit,
+    setSleepTimer: (Int?) -> Unit,
     refresh: () -> Unit,
+    manageMugs: () -> Unit,
 ) {
     val status = state.status
     val unit = preferences.unit
@@ -242,6 +294,7 @@ private fun ControlScreen(
                 Text(state.connectedName ?: "S6 Plus", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = { showDiagnostics = true }) { Icon(Icons.Rounded.Info, "Diagnostics") }
+            IconButton(onClick = manageMugs) { Icon(Icons.Rounded.Devices, "My mugs") }
             IconButton(onClick = refresh) { Icon(Icons.Rounded.Refresh, "Refresh") }
         }
       }
@@ -256,6 +309,51 @@ private fun ControlScreen(
                             Text("$hours hours")
                         }
                     }
+                }
+            }
+        }
+      }
+      item {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(28.dp)) {
+            Column(Modifier.padding(24.dp)) {
+                Text("Sleep timer", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text("Phone-supervised · requires AMUG to remain connected", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                state.sleepTimerEndsAt?.let { end ->
+                    val minutes = ((end - System.currentTimeMillis()).coerceAtLeast(0) / 60_000) + 1
+                    Text("About $minutes minutes remaining", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                }
+                Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(15, 30, 60).forEach { minutes ->
+                        OutlinedButton(onClick = { setSleepTimer(minutes) }, modifier = Modifier.weight(1f), enabled = status != null) { Text("$minutes min") }
+                    }
+                }
+                TextButton(onClick = { setSleepTimer(null) }, enabled = state.sleepTimerEndsAt != null) { Text("Cancel timer") }
+            }
+        }
+      }
+      if (state.profile == MugProfile.S6_PLUS) item {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(28.dp)) {
+            Column(Modifier.padding(24.dp)) {
+                Text("Lighting", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text("Music effects work only while temperature hold is on", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    (0..2).forEach { mode ->
+                        OutlinedButton(onClick = { setMusicMode(mode) }, modifier = Modifier.weight(1f), enabled = status?.maintenanceEnabled == true) { Text("Effect ${mode + 1}") }
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    (3..5).forEach { mode ->
+                        OutlinedButton(onClick = { setMusicMode(mode) }, modifier = Modifier.weight(1f), enabled = status?.maintenanceEnabled == true) { Text("Effect ${mode + 1}") }
+                    }
+                }
+                TextButton(onClick = { setMusicMode(null) }, enabled = status != null) { Text("Music lighting off") }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Hold light", modifier = Modifier.weight(1f))
+                    Switch(checked = status?.holdLightMode == 1, enabled = status != null, onCheckedChange = setHoldLight)
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Charging light", modifier = Modifier.weight(1f))
+                    Switch(checked = status?.chargeLightMode == 1, enabled = status != null, onCheckedChange = setChargeLight)
                 }
             }
         }
@@ -312,9 +410,10 @@ private fun ControlScreen(
                     }
                     Text(state.commandMessage ?: "Changes are confirmed by mug readback", color = when (state.commandState) { CommandState.FAILED -> MaterialTheme.colorScheme.error; CommandState.CONFIRMED -> MaterialTheme.colorScheme.primary; else -> MaterialTheme.colorScheme.onSurfaceVariant }, modifier = Modifier.padding(top = 10.dp))
                     Text("Drink presets", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 18.dp))
-                    Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Tea" to 125.0, "Cocoa" to 130.0, "Coffee" to 135.0, "Hot" to 140.0).forEach { (label, f) ->
-                            OutlinedButton(onClick = { target = if (unit == TemperatureUnit.FAHRENHEIT) f else unit.display((f - 32) * 5 / 9); setTemperature((f - 32) * 5 / 9) }, modifier = Modifier.weight(1f)) { Text(label, fontSize = 12.sp) }
+                    Row(Modifier.fillMaxWidth().padding(top = 10.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        presets.forEach { preset ->
+                            val celsius = preset.temperatureCentiC / 100.0
+                            OutlinedButton(onClick = { target = unit.display(celsius); setTemperature(celsius) }) { Text(preset.name, fontSize = 12.sp) }
                         }
                     }
                 }
@@ -418,6 +517,59 @@ private fun ControlScreen(
         onDismiss = { showTemperatureEntry = false },
         onApply = { value -> target = value; setTemperature(unit.toCelsius(value)); showTemperatureEntry = false },
     )
+}
+
+@Composable
+private fun MugManagerDialog(
+    mugs: List<MugEntity>,
+    selectedId: Long?,
+    sessions: List<MugSessionEntity>,
+    historyRetentionDays: Int,
+    select: (Long) -> Unit,
+    rename: (Long, String) -> Unit,
+    forget: (Long) -> Unit,
+    clearHistory: () -> Unit,
+    setHistoryRetention: (Int) -> Unit,
+    dismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = dismiss) {
+        Card(shape = RoundedCornerShape(28.dp)) {
+            LazyColumn(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item { Text("My mugs", fontSize = 24.sp, fontWeight = FontWeight.Black) }
+                if (mugs.isEmpty()) item { Text("No remembered mugs yet", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                items(mugs, key = MugEntity::id) { mug ->
+                    var name by remember(mug.id, mug.name) { mutableStateOf(mug.name) }
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+                        Column(Modifier.padding(14.dp)) {
+                            OutlinedTextField(name, { name = it }, label = { Text("Mug name") }, singleLine = true)
+                            Text(mug.bleAddress, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = { rename(mug.id, name) }) { Text("Rename") }
+                                TextButton(onClick = { forget(mug.id) }) { Text("Forget") }
+                                Button(onClick = { select(mug.id); dismiss() }, enabled = selectedId != mug.id) { Text(if (selectedId == mug.id) "Selected" else "Select") }
+                            }
+                        }
+                    }
+                }
+                item {
+                    Text("Session history", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                    Text("Stored only on this phone", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(7, 30, 90).forEach { days ->
+                            OutlinedButton(onClick = { setHistoryRetention(days) }, modifier = Modifier.weight(1f), enabled = historyRetentionDays != days) { Text("$days days") }
+                        }
+                    }
+                }
+                items(sessions.take(10), key = MugSessionEntity::id) { session ->
+                    val end = session.endedAt ?: System.currentTimeMillis()
+                    val minutes = ((end - session.startedAt).coerceAtLeast(0) / 60_000)
+                    Text("${java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(session.startedAt))} · ${minutes} min · ${session.endReason ?: "active"}")
+                }
+                if (sessions.isNotEmpty()) item { TextButton(onClick = clearHistory, modifier = Modifier.fillMaxWidth()) { Text("Clear selected mug history") } }
+                item { TextButton(onClick = dismiss, modifier = Modifier.fillMaxWidth()) { Text("Close") } }
+            }
+        }
+    }
 }
 
 @Composable

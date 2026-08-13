@@ -21,6 +21,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -42,6 +44,7 @@ data class BleState(
     val commandState: CommandState = CommandState.IDLE,
     val commandMessage: String? = null,
     val lastUpdatedAt: Long? = null,
+    val sleepTimerEndsAt: Long? = null,
     val events: List<BleEvent> = emptyList(),
     val error: String? = null,
 )
@@ -73,6 +76,7 @@ class MugBleClient(
     private var desiredDevice: MugDevice? = null
     private var intentionalDisconnect = false
     private var reconnectAttempts = 0
+    private var reconnectRequestId = 0
     private var phaseTimeout: Runnable? = null
     private var writeTimeout: Runnable? = null
     private var verificationTimeout: Runnable? = null
@@ -201,6 +205,7 @@ class MugBleClient(
     fun stopScan() = handler.post(::stopScanInternal)
 
     fun connect(device: MugDevice) = handler.post {
+        reconnectRequestId++
         desiredDevice = device
         intentionalDisconnect = false
         reconnectAttempts = 0
@@ -270,9 +275,29 @@ class MugBleClient(
         enqueue(QueuedWrite(MugProtocol.setSafetyWait(hours), "Set auto-off to $hours hours", verify = { it.safetyWaitHours == hours }))
     }
 
+    fun setMusicMode(mode: Int?) = handler.post {
+        val current = state.status ?: return@post
+        if (profile != MugProfile.S6_PLUS || !current.maintenanceEnabled) return@post commandFailure("Music lighting requires temperature hold")
+        if (current.nightLightEnabled) enqueue(QueuedWrite(MugProtocol.setNightLight(0, false), "Turn ambient mode off", verify = { !it.nightLightEnabled }))
+        val command = mode?.let(MugProtocol::setMusicMode) ?: MugProtocol.stopMusic
+        val expected = mode ?: 0x16
+        enqueue(QueuedWrite(command, mode?.let { "Set music light ${it + 1}" } ?: "Turn music lighting off", verify = { it.lightMode == expected }))
+    }
+
+    fun setHoldLight(enabled: Boolean) = handler.post {
+        if (profile != MugProfile.S6_PLUS || state.status == null) return@post
+        enqueue(QueuedWrite(MugProtocol.setHoldLight(enabled), "${if (enabled) "Enable" else "Disable"} hold light", verify = { it.holdLightMode == if (enabled) 1 else 0 }))
+    }
+
+    fun setChargeLight(enabled: Boolean) = handler.post {
+        if (profile != MugProfile.S6_PLUS || state.status == null) return@post
+        enqueue(QueuedWrite(MugProtocol.setChargeLight(enabled), "${if (enabled) "Enable" else "Disable"} charge light", verify = { it.chargeLightMode == if (enabled) 1 else 0 }))
+    }
+
     fun refresh() = handler.post { enqueue(QueuedWrite(MugProtocol.requestStatus, "Refresh status")) }
 
     fun disconnect() = handler.post {
+        reconnectRequestId++
         intentionalDisconnect = true
         desiredDevice = null
         stopScanInternal()
@@ -288,6 +313,19 @@ class MugBleClient(
             closeGatt()
             thread.quitSafely()
         }
+    }
+
+    fun shutdown(timeoutMs: Long = 2_000) {
+        val latch = CountDownLatch(1)
+        handler.post {
+            intentionalDisconnect = true
+            reconnectRequestId++
+            desiredDevice = null
+            closeGatt()
+            latch.countDown()
+            thread.quitSafely()
+        }
+        latch.await(timeoutMs, TimeUnit.MILLISECONDS)
     }
 
     private fun startConnection(device: MugDevice, reconnect: Boolean) {
@@ -306,11 +344,14 @@ class MugBleClient(
             ),
         )
         log(if (reconnect) "Reconnecting to ${device.name}" else "Connecting to ${device.name}")
-        val remote = adapter.getRemoteDevice(device.address)
-        gatt = if (Build.VERSION.SDK_INT >= 26) {
-            remote.connectGatt(appContext, false, callback, BluetoothDevice.TRANSPORT_LE, BluetoothDevice.PHY_LE_1M_MASK, handler)
-        } else {
-            remote.connectGatt(appContext, false, callback, BluetoothDevice.TRANSPORT_LE)
+        val remote = try { adapter.getRemoteDevice(device.address) } catch (_: IllegalArgumentException) {
+            return fail("Stored mug address is invalid", reconnect = false)
+        }
+        gatt = try {
+            if (Build.VERSION.SDK_INT >= 26) remote.connectGatt(appContext, false, callback, BluetoothDevice.TRANSPORT_LE, BluetoothDevice.PHY_LE_1M_MASK, handler)
+            else remote.connectGatt(appContext, false, callback, BluetoothDevice.TRANSPORT_LE)
+        } catch (_: SecurityException) {
+            return fail("Bluetooth permission was revoked", reconnect = false)
         }
         if (gatt == null) fail("Connection could not start") else armPhaseTimeout("Connection timed out", 12_000)
     }
@@ -419,10 +460,11 @@ class MugBleClient(
         val device = desiredDevice
         if (device != null && reconnectAttempts < 3) {
             reconnectAttempts++
+            val requestId = ++reconnectRequestId
             val delay = 750L * reconnectAttempts
             log("$message; reconnect ${reconnectAttempts}/3 in ${delay}ms")
             update(state.copy(stage = ConnectionStage.RECONNECTING, error = message, status = null))
-            handler.postDelayed({ if (!intentionalDisconnect && desiredDevice == device) startConnection(device, true) }, delay)
+            handler.postDelayed({ if (!intentionalDisconnect && desiredDevice == device && reconnectRequestId == requestId) startConnection(device, true) }, delay)
         } else fail(message, reconnect = false)
     }
 

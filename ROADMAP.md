@@ -70,6 +70,18 @@ beverage presets are maintained in [PRODUCT_SPEC.md](PRODUCT_SPEC.md).
 This alpha requires renewed physical validation before issues #1, #4, #5, and
 #6 can be closed.
 
+## v0.2 alpha 2 implementation
+
+- Foreground-service BLE ownership shared by Activity, notification, tile/widget
+- Transition-based alerts and phone-supervised sleep timers
+- Complete validated-code-path S6 Plus lighting surface
+- Quick Settings and stale-aware home widget
+- Room/DataStore multi-mug persistence, presets, cached snapshots, and history
+- Read-only Windows BLE probe and stationary bridge reference scaffold
+
+Alpha 2 remains a prerelease because the mug must be awake, advertising, and
+released by the Pixel before Windows can run physical command/readback tests.
+
 ## Revision 1 — Hardware-safe controls
 
 Goal: validate each daily-use control against the real S6 Plus without unsafe

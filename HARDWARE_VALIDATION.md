@@ -41,6 +41,14 @@
 - Temperature-glow RGB writes and interaction with music/night-light modes
 - v0.2 serialized GATT state machine, command confirmation, and reconnect flow
 - v0.2 exact target, presets, 2/4-hour safety-wait writes, and ambient-mode UI
+- v0.2 alpha 2 foreground service, notifications, timers, music/lights, tile,
+  widget, multi-mug persistence, and session history
+
+Windows validation tooling is available at `tools/ble_probe.py`. It performs a
+read-only scan, connects to A300/A301/A302, and queries version/status. The PC's
+Intel BLE adapter was confirmed working against nearby BLE devices, but the mug
+was not advertising during the validation window (asleep or still owned by the
+Pixel's single BLE connection).
 
 Protocol research confirms the S6 Plus firmware automatically disables
 temperature hold when night-light mode is enabled. AMUG therefore presents

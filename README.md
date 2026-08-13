@@ -160,6 +160,21 @@ The debug APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 - Firmware, hardware, voltage, auto-off, and a bounded BLE event log are exposed
   in Diagnostics.
 
+### v0.2 alpha 2 features
+
+- One connected-device foreground service owns the only Android GATT connection.
+- Ready, empty, low-battery, reconnect, and sleep-timer notifications.
+- Phone-supervised 15/30/60-minute timers plus experimental firmware-backed
+  2/4-hour auto-off.
+- Six music-light effects, music off, hold light, and charging light controls.
+- Pixel Quick Settings tile and responsive Glance home-screen widget.
+- Multiple named mugs with per-mug presets, unit, ambient palette/preferences.
+- Local Room session history with retention controls; no cloud or analytics.
+- Windows read-only BLE validation tools in `tools/`.
+- A documented stationary bridge reference in `bridge/` for a future legitimate
+  Google Home Cloud-to-cloud integration. A phone-only Google Home relay is not
+  technically or policy compliant.
+
 ## Status
 
 - [x] BLE protocol extracted and documented

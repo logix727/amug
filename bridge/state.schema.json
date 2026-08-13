@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AMUG bridge state",
+  "type": "object",
+  "required": ["deviceId", "observedAt", "fresh", "connected", "empty", "maintenanceEnabled"],
+  "properties": {
+    "deviceId": { "type": "string" },
+    "observedAt": { "type": "string", "format": "date-time" },
+    "fresh": { "type": "boolean" },
+    "connected": { "type": "boolean" },
+    "currentC": { "type": ["number", "null"] },
+    "targetC": { "type": ["number", "null"], "minimum": 48, "maximum": 66 },
+    "batteryPercent": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+    "charging": { "type": "boolean" },
+    "empty": { "type": "boolean" },
+    "maintenanceEnabled": { "type": "boolean" },
+    "pendingCommand": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

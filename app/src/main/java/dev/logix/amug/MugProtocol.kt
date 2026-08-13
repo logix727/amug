@@ -123,6 +123,13 @@ object MugProtocol {
         require(hours == 2 || hours == 4)
         return byteArrayOf(0x05, hours.toByte())
     }
+    fun setMusicMode(mode: Int): ByteArray {
+        require(mode in 0..5)
+        return byteArrayOf(0x09, mode.toByte())
+    }
+    val stopMusic = byteArrayOf(0x09, 0x16)
+    fun setHoldLight(enabled: Boolean) = byteArrayOf(0x0B, if (enabled) 1 else 0)
+    fun setChargeLight(enabled: Boolean) = byteArrayOf(0x0C, if (enabled) 1 else 0)
 
     fun setNightLight(color: Int, enabled: Boolean) = byteArrayOf(
         0x07,

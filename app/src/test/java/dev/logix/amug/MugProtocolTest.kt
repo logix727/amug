@@ -44,6 +44,10 @@ class MugProtocolTest {
         assertArrayEquals(byteArrayOf(0x06, 3), MugProtocol.setS6PlusGear(3))
         assertArrayEquals(byteArrayOf(0x05, 2), MugProtocol.setS6Gear(2))
         assertArrayEquals(byteArrayOf(0x07, 0x12, 0x34, 0x56, 1), MugProtocol.setNightLight(0x123456, true))
+        assertArrayEquals(byteArrayOf(0x09, 3), MugProtocol.setMusicMode(3))
+        assertArrayEquals(byteArrayOf(0x09, 0x16), MugProtocol.stopMusic)
+        assertArrayEquals(byteArrayOf(0x0B, 1), MugProtocol.setHoldLight(true))
+        assertArrayEquals(byteArrayOf(0x0C, 0), MugProtocol.setChargeLight(false))
     }
 
     @Test fun mapsTemperatureToLedGradient() {
