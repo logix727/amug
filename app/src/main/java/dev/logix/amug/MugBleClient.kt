@@ -15,6 +15,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
 import java.util.UUID
+import kotlin.math.roundToInt
 
 data class MugDevice(val name: String, val address: String, val rssi: Int)
 
@@ -44,6 +45,7 @@ class MugBleClient(
     private var pendingWrites = ArrayDeque<ByteArray>()
     private var writing = false
     private var temperatureLedEnabled = true
+    private var temperatureLedPalette = MugProtocol.defaultLedPalette
     private var lastTemperatureColor: Int? = null
     private val found = linkedMapOf<String, MugDevice>()
 
@@ -172,6 +174,12 @@ class MugBleClient(
         if (enabled) state.status?.let(::syncTemperatureLed)
     }
 
+    fun setTemperatureLedPalette(palette: List<LedColorStop>) {
+        temperatureLedPalette = palette
+        lastTemperatureColor = null
+        if (temperatureLedEnabled) state.status?.let(::syncTemperatureLed)
+    }
+
     fun refresh() = enqueue(MugProtocol.requestStatus)
 
     fun disconnect() {
@@ -220,7 +228,9 @@ class MugBleClient(
 
     private fun syncTemperatureLed(status: MugStatus) {
         if (!temperatureLedEnabled || profile != MugProfile.S6_PLUS) return
-        val color = MugProtocol.temperatureColor(status.currentC)
+        val fahrenheitStep = (status.currentC * 9 / 5 + 32).roundToInt()
+        val quantizedCelsius = (fahrenheitStep - 32) * 5 / 9.0
+        val color = MugProtocol.temperatureColor(quantizedCelsius, temperatureLedPalette)
         if (color == lastTemperatureColor) return
         lastTemperatureColor = color
         enqueue(MugProtocol.setNightLight(color, true))

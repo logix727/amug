@@ -17,6 +17,7 @@ enum class TemperatureUnit {
 data class UserPreferences(
     val unit: TemperatureUnit = TemperatureUnit.FAHRENHEIT,
     val temperatureLed: Boolean = true,
+    val ledPalette: List<LedColorStop> = MugProtocol.defaultLedPalette,
 )
 
 class MugViewModel(application: Application) : AndroidViewModel(application) {
@@ -27,6 +28,7 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
         UserPreferences(
             unit = if (storage.getString("unit", "F") == "C") TemperatureUnit.CELSIUS else TemperatureUnit.FAHRENHEIT,
             temperatureLed = storage.getBoolean("temperature_led", true),
+            ledPalette = loadLedPalette(storage.getString("led_palette", null)),
         ),
     )
     val preferences = mutablePreferences.asStateFlow()
@@ -34,6 +36,7 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         client.setTemperatureLedEnabled(mutablePreferences.value.temperatureLed)
+        client.setTemperatureLedPalette(mutablePreferences.value.ledPalette)
     }
 
     fun scan() = client.scan()
@@ -51,7 +54,28 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
         mutablePreferences.value = mutablePreferences.value.copy(temperatureLed = enabled)
         client.setTemperatureLedEnabled(enabled)
     }
+    fun setLedColor(index: Int, color: Int) {
+        val palette = mutablePreferences.value.ledPalette.toMutableList()
+        if (index !in palette.indices) return
+        palette[index] = palette[index].copy(color = color and 0xffffff)
+        saveLedPalette(palette)
+    }
+    fun resetLedPalette() = saveLedPalette(MugProtocol.defaultLedPalette)
+    private fun saveLedPalette(palette: List<LedColorStop>) {
+        storage.edit().putString("led_palette", palette.joinToString(",") { "%06X".format(it.color) }).apply()
+        mutablePreferences.value = mutablePreferences.value.copy(ledPalette = palette)
+        client.setTemperatureLedPalette(palette)
+    }
     fun refresh() = client.refresh()
 
     override fun onCleared() = client.disconnect()
+
+    companion object {
+        private fun loadLedPalette(value: String?): List<LedColorStop> {
+            val colors = value?.split(",")?.mapNotNull { it.toIntOrNull(16) }
+            return if (colors?.size == MugProtocol.defaultLedPalette.size) {
+                MugProtocol.defaultLedPalette.mapIndexed { index, stop -> stop.copy(color = colors[index]) }
+            } else MugProtocol.defaultLedPalette
+        }
+    }
 }

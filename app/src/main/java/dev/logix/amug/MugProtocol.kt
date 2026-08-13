@@ -34,7 +34,17 @@ data class MugStatus(
     val lightMode: Int,
 )
 
+data class LedColorStop(val celsius: Double, val color: Int)
+
 object MugProtocol {
+    val defaultLedPalette = listOf(
+        LedColorStop(20.0, 0x2388FF),
+        LedColorStop(35.0, 0x24C8FF),
+        LedColorStop(45.0, 0x62D96B),
+        LedColorStop(52.0, 0xFFD04A),
+        LedColorStop(59.0, 0xFF7A32),
+        LedColorStop(66.0, 0xF33232),
+    )
     val requestVersion = byteArrayOf(0x02)
     val requestStatus = byteArrayOf(0x03)
 
@@ -90,24 +100,18 @@ object MugProtocol {
         if (enabled) 1 else 0,
     )
 
-    fun temperatureColor(celsius: Double): Int {
-        val stops = listOf(
-            20.0 to 0x2388FF,
-            35.0 to 0x24C8FF,
-            45.0 to 0x62D96B,
-            52.0 to 0xFFD04A,
-            59.0 to 0xFF7A32,
-            66.0 to 0xF33232,
-        )
-        val value = celsius.coerceIn(stops.first().first, stops.last().first)
-        val upperIndex = stops.indexOfFirst { value <= it.first }.coerceAtLeast(1)
-        val (lowTemp, lowColor) = stops[upperIndex - 1]
-        val (highTemp, highColor) = stops[upperIndex]
-        val ratio = (value - lowTemp) / (highTemp - lowTemp)
+    fun temperatureColor(celsius: Double, stops: List<LedColorStop> = defaultLedPalette): Int {
+        require(stops.size >= 2) { "At least two LED color stops are required" }
+        val sorted = stops.sortedBy(LedColorStop::celsius)
+        val value = celsius.coerceIn(sorted.first().celsius, sorted.last().celsius)
+        val upperIndex = sorted.indexOfFirst { value <= it.celsius }.coerceAtLeast(1)
+        val low = sorted[upperIndex - 1]
+        val high = sorted[upperIndex]
+        val ratio = (value - low.celsius) / (high.celsius - low.celsius)
         fun channel(shift: Int): Int {
-            val low = lowColor shr shift and 0xff
-            val high = highColor shr shift and 0xff
-            return (low + (high - low) * ratio).roundToInt().coerceIn(0, 255)
+            val lowChannel = low.color shr shift and 0xff
+            val highChannel = high.color shr shift and 0xff
+            return (lowChannel + (highChannel - lowChannel) * ratio).roundToInt().coerceIn(0, 255)
         }
         return (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
     }

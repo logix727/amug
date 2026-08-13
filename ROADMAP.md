@@ -70,7 +70,8 @@ or ambiguous behavior.
 - Capture known-good packet fixtures for tests
 - Default the interface to Fahrenheit with a persistent °F/°C switch
 - Validate temperature glow: map measured drink temperature from blue through
-  amber to red on the S6 Plus RGB LED, with a persistent disable switch
+  amber to red on the S6 Plus RGB LED, show the complete temperature/color
+  legend, allow every anchor color to be customized, and persist/reset palettes
 
 Exit criteria: repeated connect/read/write cycles work without the vendor app,
 and no control is labeled more confidently than the protocol evidence allows.

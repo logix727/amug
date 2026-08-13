@@ -43,5 +43,7 @@ class MugProtocolTest {
         assertEquals(0x2388FF, MugProtocol.temperatureColor(20.0))
         assertEquals(0xF33232, MugProtocol.temperatureColor(66.0))
         assertTrue(MugProtocol.temperatureColor(52.0) != MugProtocol.temperatureColor(35.0))
+        val custom = listOf(LedColorStop(0.0, 0x000000), LedColorStop(100.0, 0xFFFFFF))
+        assertEquals(0x808080, MugProtocol.temperatureColor(50.0, custom))
     }
 }

@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -40,11 +42,13 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -52,6 +56,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,6 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
@@ -89,6 +96,8 @@ class MainActivity : ComponentActivity() {
                     viewModel::setGear,
                     viewModel::setUnit,
                     viewModel::setTemperatureLed,
+                    viewModel::setLedColor,
+                    viewModel::resetLedPalette,
                     viewModel::refresh,
                 )
             }
@@ -136,6 +145,8 @@ private fun AmugApp(
     setGear: (Int) -> Unit,
     setUnit: (TemperatureUnit) -> Unit,
     setTemperatureLed: (Boolean) -> Unit,
+    setLedColor: (Int, Int) -> Unit,
+    resetLedPalette: () -> Unit,
     refresh: () -> Unit,
 ) {
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
@@ -148,7 +159,7 @@ private fun AmugApp(
             ).padding(padding),
         ) {
             AnimatedContent(state.stage == ConnectionStage.READY, label = "screen") { connected ->
-                if (connected) ControlScreen(state, preferences, setTemperature, setHeating, setGear, setUnit, setTemperatureLed, refresh)
+                if (connected) ControlScreen(state, preferences, setTemperature, setHeating, setGear, setUnit, setTemperatureLed, setLedColor, resetLedPalette, refresh)
                 else DiscoveryScreen(state, scan, connect)
             }
         }
@@ -195,11 +206,14 @@ private fun ControlScreen(
     setGear: (Int) -> Unit,
     setUnit: (TemperatureUnit) -> Unit,
     setTemperatureLed: (Boolean) -> Unit,
+    setLedColor: (Int, Int) -> Unit,
+    resetLedPalette: () -> Unit,
     refresh: () -> Unit,
 ) {
     val status = state.status
     val unit = preferences.unit
     var target by remember(status?.targetC, unit) { mutableDoubleStateOf(unit.display(status?.targetC ?: 57.0)) }
+    var editingLedStop by remember { mutableStateOf<Int?>(null) }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 26.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
       item {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -279,15 +293,101 @@ private fun ControlScreen(
       }
       if (state.profile == MugProfile.S6_PLUS) item {
         Card(colors = CardDefaults.cardColors(containerColor = Espresso.copy(alpha = .94f)), shape = RoundedCornerShape(28.dp)) {
-            Row(Modifier.fillMaxWidth().padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(48.dp).clip(CircleShape).background(Color(status?.let { MugProtocol.temperatureColor(it.currentC) } ?: 0x2388FF)))
-                Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                    Text("Temperature glow", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    Text("LED shifts blue → amber → red", color = Cream.copy(alpha = .55f))
+            Column(Modifier.fillMaxWidth().padding(24.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Temperature glow", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        Text("The mug LED shows the measured drink temperature", color = Cream.copy(alpha = .65f))
+                    }
+                    Switch(checked = preferences.temperatureLed, onCheckedChange = setTemperatureLed)
                 }
-                Switch(checked = preferences.temperatureLed, onCheckedChange = setTemperatureLed)
+                val currentColor = status?.let { MugProtocol.temperatureColor(it.currentC, preferences.ledPalette) }
+                if (status != null && currentColor != null) {
+                    Row(Modifier.padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(34.dp).clip(CircleShape).background(Color(0xff000000.toInt() or currentColor)))
+                        Text(
+                            "  Right now: ${unit.display(status.currentC).roundToInt()}${unit.symbol}  •  #${"%06X".format(currentColor)}",
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+                Box(
+                    Modifier.fillMaxWidth().padding(top = 18.dp).height(18.dp).clip(CircleShape).background(
+                        Brush.horizontalGradient(preferences.ledPalette.map { Color(0xff000000.toInt() or it.color) }),
+                    ),
+                )
+                Text("Tap any color to customize it", color = Cream.copy(alpha = .65f), modifier = Modifier.padding(top = 16.dp))
+                preferences.ledPalette.forEachIndexed { index, stop ->
+                    val label = listOf("Cool", "Lukewarm", "Warm", "Ready", "Hot", "Very hot")[index]
+                    Row(
+                        Modifier.fillMaxWidth().clickable { editingLedStop = index }.padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.size(34.dp).clip(CircleShape).background(Color(0xff000000.toInt() or stop.color)))
+                        Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                            Text(label, fontWeight = FontWeight.Bold)
+                            Text("${unit.display(stop.celsius).roundToInt()}${unit.symbol} anchor", color = Cream.copy(alpha = .6f))
+                        }
+                        Text("#${"%06X".format(stop.color)}", fontWeight = FontWeight.Bold)
+                    }
+                }
+                OutlinedButton(onClick = resetLedPalette, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    Text("Reset default colors")
+                }
             }
         }
       }
+    }
+    editingLedStop?.let { index ->
+        LedColorEditor(
+            stop = preferences.ledPalette[index],
+            label = listOf("Cool", "Lukewarm", "Warm", "Ready", "Hot", "Very hot")[index],
+            unit = unit,
+            onDismiss = { editingLedStop = null },
+            onApply = { color -> setLedColor(index, color); editingLedStop = null },
+        )
+    }
+}
+
+@Composable
+private fun LedColorEditor(
+    stop: LedColorStop,
+    label: String,
+    unit: TemperatureUnit,
+    onDismiss: () -> Unit,
+    onApply: (Int) -> Unit,
+) {
+    val initial = remember(stop.color) {
+        FloatArray(3).also { android.graphics.Color.colorToHSV(0xff000000.toInt() or stop.color, it) }
+    }
+    var hue by remember(stop.color) { mutableFloatStateOf(initial[0]) }
+    var saturation by remember(stop.color) { mutableFloatStateOf(initial[1]) }
+    var brightness by remember(stop.color) { mutableFloatStateOf(initial[2]) }
+    val color = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, brightness)) and 0xffffff
+    Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(32.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Column(Modifier.padding(24.dp)) {
+                Text("$label color", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text("Anchor: ${unit.display(stop.celsius).roundToInt()}${unit.symbol}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Box(
+                    Modifier.fillMaxWidth().padding(vertical = 20.dp).height(80.dp).clip(RoundedCornerShape(22.dp))
+                        .background(Color(0xff000000.toInt() or color)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("#${"%06X".format(color)}", color = if (brightness > .55f) Color.Black else Color.White, fontWeight = FontWeight.Black)
+                }
+                Text("Hue", fontWeight = FontWeight.Bold)
+                Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f)
+                Text("Saturation", fontWeight = FontWeight.Bold)
+                Slider(value = saturation, onValueChange = { saturation = it }, valueRange = 0f..1f)
+                Text("Brightness", fontWeight = FontWeight.Bold)
+                Slider(value = brightness, onValueChange = { brightness = it }, valueRange = .1f..1f)
+                Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = { onApply(color) }) { Text("Apply color") }
+                }
+            }
+        }
     }
 }
