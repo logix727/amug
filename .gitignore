@@ -11,6 +11,13 @@ decompiled_pixel/
 jadx/
 jre/
 platform-tools/
+android-sdk/
+android-sdk-temp/
+gradle-dist/
+jdk17/
+.gradle/
+local.properties
+**/build/
 
 # Temp / html artifacts
 *.html

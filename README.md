@@ -118,12 +118,34 @@ Other notify ops: `02`→firmware/hw, `16`(→`10`)→MAC, `20`→AI self-heatin
 - Set temp: write `04 <int> <frac>`; control gear/hold/idle via `06`; music/night light via `09`/`07`
 - No account, no cloud — pure local BLE
 
+## Android app
+
+AMUG now includes a native Kotlin app built for modern Pixels:
+
+- Target / compile SDK 36 (Android 16)
+- Jetpack Compose + Material 3, edge-to-edge
+- Nearby Devices permissions only; no Internet permission
+- Broad Android BLE scan with `S6-PLUS-XXXX` name detection
+- Native GATT connection, notification setup, and serialized writes
+- Live temperature, target, battery, charging, heating, and empty-state display
+- S6 Plus custom temperature + gear controls
+- Plain S6 status, heat switch, and low/medium/high preset controls
+
+Build it with:
+
+```powershell
+.\gradlew.bat testDebugUnitTest assembleDebug lintDebug
+```
+
+The debug APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
+
 ## Status
 
-- [x] BLE protocol extracted & documented
-- [ ] Python BLE client skeleton (bleak)
+- [x] BLE protocol extracted and documented
+- [x] Native Android 16 Material 3 app
+- [x] Protocol unit tests and Android lint
+- [ ] Physical mug validation and packet captures
 - [ ] Home Assistant / MQTT bridge
-- [ ] Mobile app (native or Flutter)
 
 ## Extracted artifacts
 
