@@ -1,0 +1,25 @@
+# APK / XAPK files
+*.apk
+*.xapk
+*.zip
+
+# Decompiled output
+decompiled/
+decompiled_pixel/
+
+# Downloaded tools
+jadx/
+jre/
+platform-tools/
+
+# Temp / html artifacts
+*.html
+*.log
+
+# Scraping helper scripts (keep in git history if desired, but not needed)
+try_download.py
+try_download2.py
+find_apk.py
+find_apk2.py
+download_apk.py
+download_apk2.py

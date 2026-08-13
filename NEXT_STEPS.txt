@@ -1,0 +1,15 @@
+VISTOO S6 - Ready to start reverse engineering?
+
+NEXT ACTIONS:
+1. On your Android phone: Settings → Developer Options → Enable "Bluetooth HCI snoop log"
+2. Connect your S6 mug to the VSITOO app
+3. Interact with it (change temp, heat, etc.)
+4. Run: adb bugreport → extract btsnoop_hci.log from the zip
+5. Send me the log or characteristic UUIDs and I'll help decode the protocol
+
+OR if you already have the APK:
+- Install jadx (https://github.com/pxb1988/jadx)
+- Open the APK and search for Bluetooth/GATT code
+- Share any UUIDs or temperature-related code you find
+
+What would you like to do first?
