@@ -54,6 +54,22 @@ beverage presets are maintained in [PRODUCT_SPEC.md](PRODUCT_SPEC.md).
 - Plain S6 parsing and preset controls implemented but not hardware-tested
 - Protocol unit tests, Android lint, and debug build pass
 
+## v0.2 alpha implementation
+
+- Serialized BLE callback/state thread with stale-session rejection
+- Bounded connect, discovery, notification, write, and readback timeouts
+- Three-attempt reconnect and command retry behavior
+- Device-status readback required before state-changing commands are confirmed
+- Last-mug local reconnect with fresh-state reconciliation
+- Complete S6 Plus status/version parsing and Diagnostics event log
+- Fahrenheit-first slider, 1°F +/- control, exact numeric entry, and presets
+- Empty-state interlock, 140°F warning, and firmware 2/4-hour auto-off controls
+- Material You semantic colors and system light/dark behavior
+- Custom ambient temperature colors with explicit hold/night-light constraint
+
+This alpha requires renewed physical validation before issues #1, #4, #5, and
+#6 can be closed.
+
 ## Revision 1 — Hardware-safe controls
 
 Goal: validate each daily-use control against the real S6 Plus without unsafe

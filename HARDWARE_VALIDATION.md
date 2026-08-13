@@ -39,6 +39,12 @@
 - Plain S6 hardware
 - Long-running background operation
 - Temperature-glow RGB writes and interaction with music/night-light modes
+- v0.2 serialized GATT state machine, command confirmation, and reconnect flow
+- v0.2 exact target, presets, 2/4-hour safety-wait writes, and ambient-mode UI
+
+Protocol research confirms the S6 Plus firmware automatically disables
+temperature hold when night-light mode is enabled. AMUG therefore presents
+temperature glow as an explicit ambient mode and never enables it silently.
 
 ## Safety rule
 

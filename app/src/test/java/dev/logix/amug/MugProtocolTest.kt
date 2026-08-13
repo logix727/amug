@@ -11,10 +11,11 @@ class MugProtocolTest {
     @Test fun parsesS6PlusStatus() {
         val packet = byteArrayOf(
             0x03, 0x00, 0x11, 54, 44, 60, 0, 2,
-            0xFF.toByte(), 0x66, 0x22, 3, 87,
+            0xFF.toByte(), 0x66, 0x22, 3, 87, 0,
+            0x01, 0x20, 0x0E, 0x74, 1, 1, 0,
         )
         val status = MugProtocol.parseS6PlusStatus(packet)!!
-        assertTrue(status.heating)
+        assertTrue(status.maintenanceEnabled)
         assertTrue(status.charging)
         assertFalse(status.empty)
         assertEquals(54.44, status.currentC, 0.001)
@@ -28,8 +29,14 @@ class MugProtocolTest {
         val status = MugProtocol.parseS6Status(packet)!!
         assertEquals(55.5, status.currentC, 0.001)
         assertEquals(55.0, status.targetC, 0.001)
-        assertTrue(status.heating)
+        assertTrue(status.maintenanceEnabled)
         assertNull(status.batteryPercent)
+    }
+
+    @Test fun parsesVersionAndRejectsTruncatedS6PlusStatus() {
+        assertEquals(MugVersion("1.2.3", "1.0.1"), MugProtocol.parseVersion(byteArrayOf(2, 0, 1, 2, 3, 1, 0, 1)))
+        assertEquals(MugVersion("1.2.3", null), MugProtocol.parseVersion(byteArrayOf(2, 0, 1, 2, 3)))
+        assertNull(MugProtocol.parseS6PlusStatus(ByteArray(13).also { it[0] = 3 }))
     }
 
     @Test fun encodesTemperatureAndGears() {

@@ -30,10 +30,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.BluetoothSearching
 import androidx.compose.material.icons.rounded.BatteryChargingFull
-import androidx.compose.material.icons.rounded.BluetoothSearching
 import androidx.compose.material.icons.rounded.Coffee
 import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -49,6 +52,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -92,15 +96,21 @@ class MainActivity : ComponentActivity() {
                     ::startScan,
                     viewModel::connect,
                     viewModel::setTemperature,
-                    viewModel::setHeating,
+                    viewModel::setMaintenanceEnabled,
                     viewModel::setGear,
                     viewModel::setUnit,
                     viewModel::setTemperatureLed,
                     viewModel::setLedColor,
                     viewModel::resetLedPalette,
+                    viewModel::setSafetyWait,
                     viewModel::refresh,
                 )
             }
+        }
+        val permissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        val adapter = getSystemService(android.bluetooth.BluetoothManager::class.java).adapter
+        if (permissions.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED } && adapter.isEnabled) {
+            viewModel.connectLast()
         }
     }
 
@@ -116,12 +126,6 @@ class MainActivity : ComponentActivity() {
         else bluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
     }
 }
-
-private val Ink = Color(0xFF17120F)
-private val Cream = Color(0xFFFFF4E8)
-private val Ember = Color(0xFFFF6B35)
-private val Honey = Color(0xFFFFB35C)
-private val Espresso = Color(0xFF2B1B15)
 
 @Composable
 private fun AmugTheme(content: @Composable () -> Unit) {
@@ -147,6 +151,7 @@ private fun AmugApp(
     setTemperatureLed: (Boolean) -> Unit,
     setLedColor: (Int, Int) -> Unit,
     resetLedPalette: () -> Unit,
+    setSafetyWait: (Int) -> Unit,
     refresh: () -> Unit,
 ) {
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
@@ -159,7 +164,7 @@ private fun AmugApp(
             ).padding(padding),
         ) {
             AnimatedContent(state.stage == ConnectionStage.READY, label = "screen") { connected ->
-                if (connected) ControlScreen(state, preferences, setTemperature, setHeating, setGear, setUnit, setTemperatureLed, setLedColor, resetLedPalette, refresh)
+                if (connected) ControlScreen(state, preferences, setTemperature, setHeating, setGear, setUnit, setTemperatureLed, setLedColor, resetLedPalette, setSafetyWait, refresh)
                 else DiscoveryScreen(state, scan, connect)
             }
         }
@@ -169,27 +174,39 @@ private fun AmugApp(
 @Composable
 private fun DiscoveryScreen(state: BleState, scan: () -> Unit, connect: (MugDevice) -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 28.dp)) {
-        Text("AMUG", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Honey, letterSpacing = 4.sp)
+        Text("AMUG", fontSize = 14.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary, letterSpacing = 4.sp)
         Spacer(Modifier.height(10.dp))
         Text("Coffee, held\nexactly right.", fontSize = 42.sp, lineHeight = 44.sp, fontWeight = FontWeight.Bold)
-        Text("Local Bluetooth control. No login. No cloud.", color = Cream.copy(alpha = .65f), modifier = Modifier.padding(top = 14.dp))
+        Text("Local Bluetooth control. No login. No cloud.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 14.dp))
         Button(onClick = scan, modifier = Modifier.padding(top = 28.dp).height(56.dp), shape = RoundedCornerShape(20.dp)) {
-            Icon(Icons.Rounded.BluetoothSearching, null)
+            Icon(Icons.AutoMirrored.Rounded.BluetoothSearching, null)
             Text(if (state.stage == ConnectionStage.SCANNING) "  Scanning nearby" else "  Find my mug", fontWeight = FontWeight.Bold)
         }
         state.error?.let { Text(it, color = Color(0xFFFFB4AB), modifier = Modifier.padding(top = 14.dp)) }
+        if (state.stage == ConnectionStage.CONNECTING || state.stage == ConnectionStage.RECONNECTING || state.stage == ConnectionStage.INITIALIZING) {
+            Text(
+                when (state.stage) {
+                    ConnectionStage.CONNECTING -> "Connecting to ${state.connectedName}…"
+                    ConnectionStage.RECONNECTING -> "Connection lost — reconnecting…"
+                    else -> "Connected — reading mug status…"
+                },
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+        }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 24.dp)) {
             items(state.devices, key = MugDevice::address) { device ->
-                Card(onClick = { connect(device) }, colors = CardDefaults.cardColors(containerColor = Espresso.copy(alpha = .9f)), shape = RoundedCornerShape(24.dp)) {
+                Card(onClick = { connect(device) }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(24.dp)) {
                     Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Surface(shape = CircleShape, color = Ember.copy(alpha = .18f), modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.Rounded.Coffee, null, tint = Ember, modifier = Modifier.padding(12.dp))
+                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Rounded.Coffee, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(12.dp))
                         }
                         Column(Modifier.weight(1f).padding(start = 16.dp)) {
                             Text(device.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            Text("${device.rssi} dBm", color = Cream.copy(alpha = .55f))
+                            Text("${device.rssi} dBm", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Text("Connect", color = Honey, fontWeight = FontWeight.Bold)
+                        Text("Connect", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -208,50 +225,97 @@ private fun ControlScreen(
     setTemperatureLed: (Boolean) -> Unit,
     setLedColor: (Int, Int) -> Unit,
     resetLedPalette: () -> Unit,
+    setSafetyWait: (Int) -> Unit,
     refresh: () -> Unit,
 ) {
     val status = state.status
     val unit = preferences.unit
     var target by remember(status?.targetC, unit) { mutableDoubleStateOf(unit.display(status?.targetC ?: 57.0)) }
     var editingLedStop by remember { mutableStateOf<Int?>(null) }
+    var showDiagnostics by remember { mutableStateOf(false) }
+    var showTemperatureEntry by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 26.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
       item {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("AMUG", color = Honey, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
-                Text(state.connectedName ?: "S6 Plus", color = Cream.copy(alpha = .6f))
+                Text("AMUG", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
+                Text(state.connectedName ?: "S6 Plus", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            IconButton(onClick = { showDiagnostics = true }) { Icon(Icons.Rounded.Info, "Diagnostics") }
             IconButton(onClick = refresh) { Icon(Icons.Rounded.Refresh, "Refresh") }
         }
       }
-      item {
-        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(36.dp)).background(Brush.linearGradient(listOf(Ember, Color(0xFFB53723)))).padding(28.dp)) {
-            Column {
-                Text("RIGHT NOW", color = Color.White.copy(alpha = .7f), fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                Text(status?.let { "${unit.display(it.currentC).roundToInt()}°" } ?: "--°", fontSize = 92.sp, lineHeight = 102.sp, fontWeight = FontWeight.Black, color = Color.White)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.LocalFireDepartment, null, tint = Color.White)
-                    Text(if (status?.heating == true) " Heating to ${unit.display(status.targetC).roundToInt()}${unit.symbol}" else " Holding steady", color = Color.White, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.weight(1f))
-                    Icon(Icons.Rounded.BatteryChargingFull, null, tint = Color.White)
-                    Text(status?.batteryPercent?.let { " $it%" } ?: " --", color = Color.White, fontWeight = FontWeight.Bold)
+      if (state.profile == MugProfile.S6_PLUS) item {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(28.dp)) {
+            Column(Modifier.padding(24.dp)) {
+                Text("Automatic shutoff", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text("Experimental · stored by mug firmware; physical validation pending", color = MaterialTheme.colorScheme.error)
+                Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    listOf(2, 4).forEach { hours ->
+                        Button(onClick = { setSafetyWait(hours) }, modifier = Modifier.weight(1f), enabled = status != null) {
+                            Text("$hours hours")
+                        }
+                    }
                 }
             }
         }
       }
       item {
-        Card(colors = CardDefaults.cardColors(containerColor = Espresso.copy(alpha = .94f)), shape = RoundedCornerShape(28.dp)) {
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(36.dp)).background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer))).padding(28.dp)) {
+            Column {
+                Text("RIGHT NOW", color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .7f), fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Text(status?.let { "${unit.display(it.currentC).roundToInt()}°" } ?: "--°", fontSize = 80.sp, lineHeight = 90.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.LocalFireDepartment, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text(if (status?.maintenanceEnabled == true) " Temperature hold on · ${unit.display(status.targetC).roundToInt()}${unit.symbol}" else " Temperature hold off", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    if (status?.charging == true) Icon(Icons.Rounded.BatteryChargingFull, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text(status?.batteryPercent?.let { " $it%" } ?: " --", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+      }
+      if (status?.empty == true) item {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+            Text("Empty — the mug has stopped temperature hold. Add liquid before turning hold on.", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold, modifier = Modifier.padding(20.dp))
+        }
+      }
+      if (target >= 140.0 && unit == TemperatureUnit.FAHRENHEIT || target >= 60.0 && unit == TemperatureUnit.CELSIUS) item {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+            Text("Very hot · Sip carefully", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Black, modifier = Modifier.padding(18.dp))
+        }
+      }
+      item {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(28.dp)) {
             if (state.profile == MugProfile.S6_PLUS) {
                 Column(Modifier.padding(24.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text("Target temperature", fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
-                        Text("${target.roundToInt()}${unit.symbol}", color = Honey, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                        Text(
+                            "${target.roundToInt()}${unit.symbol}",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 28.sp,
+                            modifier = Modifier.clickable { showTemperatureEntry = true },
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { target = (target - 1).coerceAtLeast(if (unit == TemperatureUnit.FAHRENHEIT) 120.0 else 48.0); setTemperature(unit.toCelsius(target)) }, modifier = Modifier.size(56.dp)) { Icon(Icons.Rounded.Remove, "Decrease target") }
+                        Text("Exact 1${unit.symbol} steps", modifier = Modifier.padding(horizontal = 18.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        IconButton(onClick = { target = (target + 1).coerceAtMost(if (unit == TemperatureUnit.FAHRENHEIT) 150.0 else 66.0); setTemperature(unit.toCelsius(target)) }, modifier = Modifier.size(56.dp)) { Icon(Icons.Rounded.Add, "Increase target") }
                     }
                     val range = if (unit == TemperatureUnit.FAHRENHEIT) 120f..150f else 48f..66f
                     Slider(value = target.toFloat().coerceIn(range), onValueChange = { target = it.toDouble() }, onValueChangeFinished = { setTemperature(unit.toCelsius(target)) }, valueRange = range, steps = if (unit == TemperatureUnit.FAHRENHEIT) 29 else 17)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(if (unit == TemperatureUnit.FAHRENHEIT) "120°" else "48°", color = Cream.copy(alpha = .5f))
-                        Text(if (unit == TemperatureUnit.FAHRENHEIT) "150°" else "66°", color = Cream.copy(alpha = .5f))
+                        Text(if (unit == TemperatureUnit.FAHRENHEIT) "120°" else "48°", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (unit == TemperatureUnit.FAHRENHEIT) "150°" else "66°", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(state.commandMessage ?: "Changes are confirmed by mug readback", color = when (state.commandState) { CommandState.FAILED -> MaterialTheme.colorScheme.error; CommandState.CONFIRMED -> MaterialTheme.colorScheme.primary; else -> MaterialTheme.colorScheme.onSurfaceVariant }, modifier = Modifier.padding(top = 10.dp))
+                    Text("Drink presets", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 18.dp))
+                    Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("Tea" to 125.0, "Cocoa" to 130.0, "Coffee" to 135.0, "Hot" to 140.0).forEach { (label, f) ->
+                            OutlinedButton(onClick = { target = if (unit == TemperatureUnit.FAHRENHEIT) f else unit.display((f - 32) * 5 / 9); setTemperature((f - 32) * 5 / 9) }, modifier = Modifier.weight(1f)) { Text(label, fontSize = 12.sp) }
+                        }
                     }
                 }
             } else {
@@ -267,21 +331,21 @@ private fun ControlScreen(
         }
       }
       item {
-        Card(colors = CardDefaults.cardColors(containerColor = Espresso.copy(alpha = .94f)), shape = RoundedCornerShape(28.dp)) {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(28.dp)) {
             Row(Modifier.fillMaxWidth().padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = CircleShape, color = Ember.copy(alpha = .18f), modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Rounded.LocalFireDepartment, null, tint = Ember, modifier = Modifier.padding(12.dp))
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Rounded.LocalFireDepartment, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(12.dp))
                 }
                 Column(Modifier.weight(1f).padding(start = 16.dp)) {
-                    Text("Heat mode", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    Text(if (status?.empty == true) "Mug appears empty" else "Keep this drink warm", color = Cream.copy(alpha = .55f))
+                    Text("Temperature hold", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(if (status?.empty == true) "Unavailable while mug is empty" else "Maintain the selected temperature", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(checked = status?.heating == true, onCheckedChange = setHeating)
+                Switch(checked = status?.maintenanceEnabled == true, enabled = status != null && !status.empty && !status.nightLightEnabled, onCheckedChange = setHeating)
             }
         }
       }
       item {
-        Card(colors = CardDefaults.cardColors(containerColor = Espresso.copy(alpha = .94f)), shape = RoundedCornerShape(28.dp)) {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(28.dp)) {
             Column(Modifier.padding(24.dp)) {
                 Text("Display", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -292,12 +356,12 @@ private fun ControlScreen(
         }
       }
       if (state.profile == MugProfile.S6_PLUS) item {
-        Card(colors = CardDefaults.cardColors(containerColor = Espresso.copy(alpha = .94f)), shape = RoundedCornerShape(28.dp)) {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(28.dp)) {
             Column(Modifier.fillMaxWidth().padding(24.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Temperature glow", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        Text("The mug LED shows the measured drink temperature", color = Cream.copy(alpha = .65f))
+                        Text("Ambient display mode · turning it on pauses temperature hold", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = preferences.temperatureLed, onCheckedChange = setTemperatureLed)
                 }
@@ -316,7 +380,7 @@ private fun ControlScreen(
                         Brush.horizontalGradient(preferences.ledPalette.map { Color(0xff000000.toInt() or it.color) }),
                     ),
                 )
-                Text("Tap any color to customize it", color = Cream.copy(alpha = .65f), modifier = Modifier.padding(top = 16.dp))
+                Text("Tap any color to customize it", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
                 preferences.ledPalette.forEachIndexed { index, stop ->
                     val label = listOf("Cool", "Lukewarm", "Warm", "Ready", "Hot", "Very hot")[index]
                     Row(
@@ -326,7 +390,7 @@ private fun ControlScreen(
                         Box(Modifier.size(34.dp).clip(CircleShape).background(Color(0xff000000.toInt() or stop.color)))
                         Column(Modifier.weight(1f).padding(start = 14.dp)) {
                             Text(label, fontWeight = FontWeight.Bold)
-                            Text("${unit.display(stop.celsius).roundToInt()}${unit.symbol} anchor", color = Cream.copy(alpha = .6f))
+                            Text("${unit.display(stop.celsius).roundToInt()}${unit.symbol} anchor", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Text("#${"%06X".format(stop.color)}", fontWeight = FontWeight.Bold)
                     }
@@ -346,6 +410,67 @@ private fun ControlScreen(
             onDismiss = { editingLedStop = null },
             onApply = { color -> setLedColor(index, color); editingLedStop = null },
         )
+    }
+    if (showDiagnostics) DiagnosticsDialog(state = state, onDismiss = { showDiagnostics = false })
+    if (showTemperatureEntry) TemperatureEntryDialog(
+        current = target,
+        unit = unit,
+        onDismiss = { showTemperatureEntry = false },
+        onApply = { value -> target = value; setTemperature(unit.toCelsius(value)); showTemperatureEntry = false },
+    )
+}
+
+@Composable
+private fun TemperatureEntryDialog(
+    current: Double,
+    unit: TemperatureUnit,
+    onDismiss: () -> Unit,
+    onApply: (Double) -> Unit,
+) {
+    var value by remember { mutableStateOf(current.roundToInt().toString()) }
+    val range = if (unit == TemperatureUnit.FAHRENHEIT) 120.0..150.0 else 48.0..66.0
+    val parsed = value.toDoubleOrNull()
+    val valid = parsed != null && parsed in range
+    Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(28.dp)) {
+            Column(Modifier.padding(24.dp)) {
+                Text("Set exact temperature", fontSize = 24.sp, fontWeight = FontWeight.Black)
+                Text("${range.start.roundToInt()}–${range.endInclusive.roundToInt()}${unit.symbol}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it.filter { char -> char.isDigit() || char == '.' }.take(5) },
+                    label = { Text("Temperature ${unit.symbol}") },
+                    singleLine = true,
+                    isError = value.isNotEmpty() && !valid,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = { onApply(parsed!!) }, enabled = valid) { Text("Set temperature") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiagnosticsDialog(state: BleState, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(28.dp)) {
+            LazyColumn(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { Text("Diagnostics", fontSize = 24.sp, fontWeight = FontWeight.Black) }
+                item { Text("Device: ${state.connectedName ?: "Not connected"}") }
+                item { Text("Profile: ${state.profile ?: "Unknown"}") }
+                item { Text("Firmware: ${state.version?.firmware ?: "Unknown"} · Hardware: ${state.version?.hardware ?: "Not reported"}") }
+                item { Text("Connection: ${state.stage}") }
+                item { Text("Auto-off: ${state.status?.safetyWaitHours?.let { "$it hours" } ?: "Unknown"}") }
+                item { Text("Battery voltage: ${state.status?.batteryMillivolts?.let { "$it mV" } ?: "Unknown"}") }
+                item { Text("Recent BLE events", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
+                items(state.events.asReversed().take(30)) { event -> Text(event.message, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                item { Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Close") } }
+            }
+        }
     }
 }
 

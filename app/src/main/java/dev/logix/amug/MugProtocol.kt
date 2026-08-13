@@ -24,7 +24,7 @@ enum class MugProfile(
 }
 
 data class MugStatus(
-    val heating: Boolean,
+    val maintenanceEnabled: Boolean,
     val empty: Boolean,
     val charging: Boolean,
     val currentC: Double,
@@ -32,7 +32,15 @@ data class MugStatus(
     val batteryPercent: Int?,
     val lightColor: Int,
     val lightMode: Int,
+    val safetyWaitHours: Int?,
+    val batteryTemperatureMillivolts: Int?,
+    val batteryMillivolts: Int?,
+    val holdLightMode: Int?,
+    val chargeLightMode: Int?,
+    val nightLightEnabled: Boolean,
 )
+
+data class MugVersion(val firmware: String, val hardware: String?)
 
 data class LedColorStop(val celsius: Double, val color: Int)
 
@@ -49,17 +57,24 @@ object MugProtocol {
     val requestStatus = byteArrayOf(0x03)
 
     fun parseS6PlusStatus(data: ByteArray): MugStatus? {
-        if (data.size < 13 || data[0].u8() != 0x03) return null
+        if (data.size < 21 || data[0].u8() != 0x03) return null
         val flags = data[2].u8()
+        val battery = data[12].u8().takeIf { it in 0..100 }
         return MugStatus(
-            heating = flags and 0x01 != 0,
+            maintenanceEnabled = flags and 0x01 != 0,
             empty = flags and 0x04 != 0,
             charging = flags and 0x10 != 0,
             currentC = data[3].u8() + data[4].u8() / 100.0,
             targetC = data[5].u8() + data[6].u8() / 100.0,
             lightColor = (data[8].u8() shl 16) or (data[9].u8() shl 8) or data[10].u8(),
             lightMode = data[11].u8(),
-            batteryPercent = data[12].u8().coerceIn(0, 100),
+            batteryPercent = battery,
+            safetyWaitHours = data[7].u8().takeUnless { it == 0xff },
+            batteryTemperatureMillivolts = (data[14].u8() shl 8) or data[15].u8(),
+            batteryMillivolts = (data[16].u8() shl 8) or data[17].u8(),
+            holdLightMode = data[18].u8(),
+            chargeLightMode = data[19].u8(),
+            nightLightEnabled = data[20].u8() == 1,
         )
     }
 
@@ -73,7 +88,7 @@ object MugProtocol {
         )
         val selectedPreset = data[11].u8().coerceIn(1, 3) - 1
         return MugStatus(
-            heating = flags and 0x01 != 0,
+            maintenanceEnabled = flags and 0x01 != 0,
             empty = flags and 0x04 != 0,
             charging = false,
             currentC = data[3].u8() + data[4].u8() / 10.0,
@@ -81,7 +96,20 @@ object MugProtocol {
             batteryPercent = null,
             lightColor = 0,
             lightMode = 0,
+            safetyWaitHours = data[13].u8().takeUnless { it == 0xff },
+            batteryTemperatureMillivolts = null,
+            batteryMillivolts = null,
+            holdLightMode = null,
+            chargeLightMode = null,
+            nightLightEnabled = false,
         )
+    }
+
+    fun parseVersion(data: ByteArray): MugVersion? {
+        if (data.size < 5 || data[0].u8() != 0x02) return null
+        val firmware = "${data[2].u8()}.${data[3].u8()}.${data[4].u8()}"
+        val hardware = if (data.size >= 8) "${data[5].u8()}.${data[6].u8()}.${data[7].u8()}" else null
+        return MugVersion(firmware, hardware)
     }
 
     fun setTemperature(celsius: Double): ByteArray {
@@ -91,6 +119,10 @@ object MugProtocol {
 
     fun setS6PlusGear(gear: Int) = byteArrayOf(0x06, gear.coerceIn(0, 3).toByte())
     fun setS6Gear(gear: Int) = byteArrayOf(0x05, gear.coerceIn(0, 3).toByte())
+    fun setSafetyWait(hours: Int): ByteArray {
+        require(hours == 2 || hours == 4)
+        return byteArrayOf(0x05, hours.toByte())
+    }
 
     fun setNightLight(color: Int, enabled: Boolean) = byteArrayOf(
         0x07,

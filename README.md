@@ -134,7 +134,8 @@ AMUG now includes a native Kotlin app built for modern Pixels:
 - Native GATT connection, notification setup, and serialized writes
 - Live temperature, target, battery, charging, heating, and empty-state display
 - Fahrenheit by default with a persistent °F/°C switch
-- Optional temperature-responsive physical RGB LED
+- Optional customizable temperature-responsive RGB ambient mode; the S6 Plus
+  firmware pauses temperature hold while night-light/ambient mode is active
 - S6 Plus custom temperature + gear controls
 - Plain S6 status, heat switch, and low/medium/high preset controls
 
@@ -145,6 +146,19 @@ Build it with:
 ```
 
 The debug APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
+
+### v0.2 behavior
+
+- Controls remain disabled until the mug returns a complete status snapshot.
+- State-changing commands are confirmed through device status readback.
+- Temperature hold, empty, charging, ambient mode, and connection state are
+  shown separately; AMUG does not claim to know when the heater coil is active.
+- Ambient temperature colors are fully customizable and intentionally pause
+  temperature hold because that is how S6 Plus firmware implements night light.
+- The last mug reconnects automatically with bounded retries and fresh-state
+  reconciliation.
+- Firmware, hardware, voltage, auto-off, and a bounded BLE event log are exposed
+  in Diagnostics.
 
 ## Status
 

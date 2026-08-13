@@ -16,7 +16,7 @@ enum class TemperatureUnit {
 
 data class UserPreferences(
     val unit: TemperatureUnit = TemperatureUnit.FAHRENHEIT,
-    val temperatureLed: Boolean = true,
+    val temperatureLed: Boolean = false,
     val ledPalette: List<LedColorStop> = MugProtocol.defaultLedPalette,
 )
 
@@ -27,7 +27,7 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
     private val mutablePreferences = MutableStateFlow(
         UserPreferences(
             unit = if (storage.getString("unit", "F") == "C") TemperatureUnit.CELSIUS else TemperatureUnit.FAHRENHEIT,
-            temperatureLed = storage.getBoolean("temperature_led", true),
+            temperatureLed = storage.getBoolean("ambient_temperature_mode", false),
             ledPalette = loadLedPalette(storage.getString("led_palette", null)),
         ),
     )
@@ -35,24 +35,37 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
     private val client = MugBleClient(application) { mutableState.value = it }
 
     init {
-        client.setTemperatureLedEnabled(mutablePreferences.value.temperatureLed)
+        client.setAmbientTemperatureMode(mutablePreferences.value.temperatureLed)
         client.setTemperatureLedPalette(mutablePreferences.value.ledPalette)
     }
 
     fun scan() = client.scan()
-    fun connect(device: MugDevice) = client.connect(device)
+    fun connect(device: MugDevice) {
+        storage.edit().putString("last_name", device.name).putString("last_address", device.address).apply()
+        client.connect(device)
+    }
+    fun connectLast(): Boolean {
+        if (mutableState.value.stage !in setOf(ConnectionStage.IDLE, ConnectionStage.ERROR)) return false
+        val address = storage.getString("last_address", null) ?: return false
+        val name = storage.getString("last_name", "VSITOO mug") ?: "VSITOO mug"
+        client.connect(MugDevice(name, address, 0))
+        return true
+    }
     fun disconnect() = client.disconnect()
     fun setTemperature(celsius: Double) = client.setTemperature(celsius)
-    fun setHeating(enabled: Boolean) = client.setHeating(enabled)
+    fun setMaintenanceEnabled(enabled: Boolean) {
+        if (enabled && mutablePreferences.value.temperatureLed) setTemperatureLed(false)
+        client.setMaintenanceEnabled(enabled)
+    }
     fun setGear(gear: Int) = client.setGear(gear)
     fun setUnit(unit: TemperatureUnit) {
         storage.edit().putString("unit", if (unit == TemperatureUnit.FAHRENHEIT) "F" else "C").apply()
         mutablePreferences.value = mutablePreferences.value.copy(unit = unit)
     }
     fun setTemperatureLed(enabled: Boolean) {
-        storage.edit().putBoolean("temperature_led", enabled).apply()
+        storage.edit().putBoolean("ambient_temperature_mode", enabled).apply()
         mutablePreferences.value = mutablePreferences.value.copy(temperatureLed = enabled)
-        client.setTemperatureLedEnabled(enabled)
+        client.setAmbientTemperatureMode(enabled)
     }
     fun setLedColor(index: Int, color: Int) {
         val palette = mutablePreferences.value.ledPalette.toMutableList()
@@ -61,6 +74,7 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
         saveLedPalette(palette)
     }
     fun resetLedPalette() = saveLedPalette(MugProtocol.defaultLedPalette)
+    fun setSafetyWait(hours: Int) = client.setSafetyWait(hours)
     private fun saveLedPalette(palette: List<LedColorStop>) {
         storage.edit().putString("led_palette", palette.joinToString(",") { "%06X".format(it.color) }).apply()
         mutablePreferences.value = mutablePreferences.value.copy(ledPalette = palette)
@@ -68,7 +82,7 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun refresh() = client.refresh()
 
-    override fun onCleared() = client.disconnect()
+    override fun onCleared() = client.close()
 
     companion object {
         private fun loadLedPalette(value: String?): List<LedColorStop> {

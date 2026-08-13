@@ -72,10 +72,12 @@ a separate controlled preparation and cooling process.
    transport failure, and superseded slider commands.
 8. **Empty-state interlock:** disable heat actions when firmware reports empty.
 9. **Contradictory-state guard:** suspend automations on impossible state combos.
-10. **Temperature glow:** physical LED maps measured temperature across six
+10. **Temperature glow / ambient mode:** physical LED maps measured temperature across six
     visible, named temperature anchors. Every color is editable with live
     preview, persistent storage, a clear legend, reset defaults, and safety
-    state overrides.
+    state overrides. S6 Plus firmware makes night-light mode mutually exclusive
+    with temperature hold, so this is explicitly an ambient mode that pauses
+    hold rather than an always-on background indicator.
 11. **Drink presets:** editable tea, cocoa, coffee, espresso, latte, and custom.
 12. **Hot-temperature caution:** warning at 140°F+ and app safety ceiling.
 13. **Ready band:** stable target tolerance before declaring the drink ready.
