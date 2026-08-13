@@ -22,6 +22,8 @@ local.properties
 # Temp / html artifacts
 *.html
 *.log
+__pycache__/
+*.py[cod]
 
 # Scraping helper scripts (keep in git history if desired, but not needed)
 try_download.py
