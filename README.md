@@ -1,9 +1,10 @@
-# VSITOO S6 / S6 Plus Smart Mug — Reverse Engineering
+# AMUG — A better app for your VSITOO smart mug
 
 Reverse engineering of the VSITOO smart self-heating mug BLE protocol so we can
-build a better control app. The official app (`com.jimiyoupin.vsitoo`, "VSITOO"
-on Google Play / App Store) is a DCloud uni-app whose entire device logic is in
-minified JavaScript assets, which makes protocol extraction straightforward.
+build a better control app — no account, no cloud, just Bluetooth. The official
+app (`com.jimiyoupin.vsitoo`, "VSITOO" on Google Play / App Store) is a DCloud
+uni-app whose entire device logic is in minified JavaScript assets, which makes
+protocol extraction straightforward.
 
 ## Device info (S6 Plus)
 
@@ -116,6 +117,13 @@ Other notify ops: `02`→firmware/hw, `16`(→`10`)→MAC, `20`→AI self-heatin
 - Connect → discover → enable notify → send `02` + `03` → parse status
 - Set temp: write `04 <int> <frac>`; control gear/hold/idle via `06`; music/night light via `09`/`07`
 - No account, no cloud — pure local BLE
+
+## Status
+
+- [x] BLE protocol extracted & documented
+- [ ] Python BLE client skeleton (bleak)
+- [ ] Home Assistant / MQTT bridge
+- [ ] Mobile app (native or Flutter)
 
 ## Extracted artifacts
 
