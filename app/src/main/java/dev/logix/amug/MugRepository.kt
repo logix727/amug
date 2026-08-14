@@ -26,7 +26,14 @@ data class GlobalPreferences(
     val unit: TemperatureUnit = TemperatureUnit.FAHRENHEIT,
     val selectedMugId: Long? = null,
     val historyRetentionDays: Int = 30,
+    val readyAlert: Boolean = false,
+    val emptyAlert: Boolean = false,
+    val lowBatteryAlert: Boolean = false,
+    val disconnectAlert: Boolean = false,
+    val hotAlert: Boolean = false,
 )
+
+enum class AlertKind { READY, EMPTY, LOW_BATTERY, DISCONNECT, HOT }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MugRepository(private val context: Context) {
@@ -37,6 +44,11 @@ class MugRepository(private val context: Context) {
             unit = runCatching { TemperatureUnit.valueOf(values[UNIT] ?: TemperatureUnit.FAHRENHEIT.name) }.getOrDefault(TemperatureUnit.FAHRENHEIT),
             selectedMugId = values[SELECTED_MUG_ID]?.takeIf { it > 0 },
             historyRetentionDays = values[RETENTION_DAYS] ?: 30,
+            readyAlert = values[ALERT_READY] ?: false,
+            emptyAlert = values[ALERT_EMPTY] ?: false,
+            lowBatteryAlert = values[ALERT_LOW_BATTERY] ?: false,
+            disconnectAlert = values[ALERT_DISCONNECT] ?: false,
+            hotAlert = values[ALERT_HOT] ?: false,
         )
     }
     val mugs: Flow<List<MugEntity>> = db.mugs().observeAll()
@@ -103,6 +115,7 @@ class MugRepository(private val context: Context) {
     }
     suspend fun setUnit(unit: TemperatureUnit) = store.edit { it[UNIT] = unit.name }
     suspend fun setHistoryRetention(days: Int) = store.edit { it[RETENTION_DAYS] = days.coerceIn(1, 3650) }
+    suspend fun setAlert(kind: AlertKind, enabled: Boolean) = store.edit { it[alertKey(kind)] = enabled }
     suspend fun mugPreferences(mugId: Long) = db.mugPreferences().get(mugId) ?: MugPreferencesEntity(mugId, ledPalette = encodePalette(MugProtocol.defaultLedPalette))
     suspend fun saveMugPreferences(preferences: MugPreferencesEntity) = db.mugPreferences().upsert(preferences)
     fun presets(mugId: Long) = db.presets().observe(mugId)
@@ -136,6 +149,11 @@ class MugRepository(private val context: Context) {
         private val SELECTED_MUG_ID = longPreferencesKey("selected_mug_id")
         private val RETENTION_DAYS = intPreferencesKey("history_retention_days")
         private val LEGACY_MIGRATED = booleanPreferencesKey("legacy_preferences_migrated_v1")
+        private val ALERT_READY = booleanPreferencesKey("alert_ready")
+        private val ALERT_EMPTY = booleanPreferencesKey("alert_empty")
+        private val ALERT_LOW_BATTERY = booleanPreferencesKey("alert_low_battery")
+        private val ALERT_DISCONNECT = booleanPreferencesKey("alert_disconnect")
+        private val ALERT_HOT = booleanPreferencesKey("alert_hot")
         private val migrationMutex = Mutex()
         val APPROVED_PRESETS = listOf(
             "Green tea" to 5200, "White tea" to 5200,
@@ -149,6 +167,13 @@ class MugRepository(private val context: Context) {
             val colors = value?.split(",")?.mapNotNull { it.toIntOrNull(16) }
             return if (colors?.size == MugProtocol.defaultLedPalette.size) MugProtocol.defaultLedPalette.mapIndexed { index, stop -> stop.copy(color = colors[index]) }
             else MugProtocol.defaultLedPalette
+        }
+        private fun alertKey(kind: AlertKind) = when (kind) {
+            AlertKind.READY -> ALERT_READY
+            AlertKind.EMPTY -> ALERT_EMPTY
+            AlertKind.LOW_BATTERY -> ALERT_LOW_BATTERY
+            AlertKind.DISCONNECT -> ALERT_DISCONNECT
+            AlertKind.HOT -> ALERT_HOT
         }
     }
 }

@@ -3,6 +3,8 @@ package dev.logix.amug
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -57,6 +59,8 @@ class MainActivity : ComponentActivity() {
                     applySuggestion = viewModel::applySuggestion,
                     saveSuggestion = viewModel::saveSuggestionAsPreset,
                     resetLearning = viewModel::resetLearning,
+                    savePersonalPreset = viewModel::savePersonalPreset,
+                    deletePersonalPreset = viewModel::deletePersonalPreset,
                     setHeating = viewModel::setMaintenanceEnabled,
                     setGear = viewModel::setGear,
                     setUnit = viewModel::setUnit,
@@ -69,21 +73,29 @@ class MainActivity : ComponentActivity() {
                     setChargeLight = viewModel::setChargeLight,
                     setSleepTimer = viewModel::setSleepTimer,
                     refresh = viewModel::refresh,
+                    reconnect = { viewModel.disconnect(); viewModel.connectLast() },
+                    disconnect = viewModel::disconnect,
+                    clearEvents = viewModel::clearEvents,
+                    exportDiagnostics = { text ->
+                        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("AMUG diagnostics", text))
+                        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share AMUG diagnostics"))
+                    },
                     selectMug = viewModel::selectMug,
                     renameMug = viewModel::renameMug,
                     forgetMug = viewModel::forgetMug,
                     clearHistory = viewModel::clearHistory,
                     setHistoryRetention = viewModel::setHistoryRetention,
+                    alertPreferences = globalPreferences,
+                    setAlert = { kind, enabled ->
+                        if (enabled) requestNotificationPermission()
+                        viewModel.setAlert(kind, enabled)
+                    },
                 )
             }
         }
-        val permissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
-        val adapter = getSystemService(android.bluetooth.BluetoothManager::class.java).adapter
-        if (permissions.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED } && adapter.isEnabled) requestNotificationPermission()
     }
 
     private fun startScan() {
-        requestNotificationPermission()
         val permissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
         if (permissions.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) ensureBluetoothThenScan()
         else permissionLauncher.launch(permissions)

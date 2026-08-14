@@ -64,6 +64,7 @@ class MugConnectionService : Service() {
             }
         }
         fun refresh() = client.refresh()
+        fun clearEvents() = client.clearEvents()
     }
 
     private val mutableState = MutableStateFlow(BleState())
@@ -83,6 +84,8 @@ class MugConnectionService : Service() {
     private var previousEmpty = false
     private var previousLowBattery = false
     private var previousStage = ConnectionStage.IDLE
+    private var previousHot = false
+    private var alertPreferences = GlobalPreferences()
     private var lastNotificationKey: List<Any?>? = null
     private val persistenceMutex = Mutex()
     private var activeMugId: Long? = null
@@ -103,6 +106,7 @@ class MugConnectionService : Service() {
             repository.pruneHistory()
             repositoryReady = true
         }
+        scope.launch { repository.globalPreferences.collect { alertPreferences = it } }
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -331,14 +335,17 @@ class MugConnectionService : Service() {
         val ready = status != null && status.maintenanceEnabled && kotlin.math.abs(status.currentC - status.targetC) <= .55
         val empty = status?.empty == true
         val lowBattery = (status?.batteryPercent ?: 100) <= 15
-        if (ready && !previousReady) alert(ALERT_READY, "Your drink is ready", "${fahrenheit(status!!.currentC)}°F and holding")
-        if (empty && !previousEmpty) alert(ALERT_EMPTY, "Mug is empty", "Temperature hold is unavailable until liquid is added")
-        if (lowBattery && !previousLowBattery) alert(ALERT_BATTERY, "Mug battery is low", "${status?.batteryPercent}% remaining")
-        if (state.stage == ConnectionStage.RECONNECTING && previousStage == ConnectionStage.READY) alert(ALERT_CONNECTION, "Mug connection lost", "AMUG is trying to reconnect")
+        val hot = (status?.currentC ?: 0.0) >= 60.0
+        if (ready && !previousReady && alertPreferences.readyAlert) alert(ALERT_READY, "Your drink is ready", "${fahrenheit(status!!.currentC)}°F and holding")
+        if (empty && !previousEmpty && alertPreferences.emptyAlert) alert(ALERT_EMPTY, "Mug is empty", "Temperature hold is unavailable until liquid is added")
+        if (lowBattery && !previousLowBattery && alertPreferences.lowBatteryAlert) alert(ALERT_BATTERY, "Mug battery is low", "${status?.batteryPercent}% remaining")
+        if (state.stage == ConnectionStage.RECONNECTING && previousStage == ConnectionStage.READY && alertPreferences.disconnectAlert) alert(ALERT_CONNECTION, "Mug connection lost", "AMUG is trying to reconnect")
+        if (hot && !previousHot && alertPreferences.hotAlert) alert(ALERT_HOT, "Drink is very hot", "${fahrenheit(status!!.currentC)}°F · sip carefully")
         previousReady = ready
         previousEmpty = empty
         previousLowBattery = lowBattery
         previousStage = state.stage
+        previousHot = hot
     }
 
     private fun alert(id: Int, title: String, text: String) {
@@ -369,6 +376,7 @@ class MugConnectionService : Service() {
         private const val ALERT_BATTERY = 1103
         private const val ALERT_CONNECTION = 1104
         private const val ALERT_TIMER = 1105
+        private const val ALERT_HOT = 1106
         private const val WIDGET_THROTTLE_MS = 15_000L
         private const val SAMPLE_INTERVAL_MS = 60_000L
     }

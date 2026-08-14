@@ -120,6 +120,8 @@ fun AmugApp(
     applySuggestion: (TemperatureSuggestion) -> Unit,
     saveSuggestion: (TemperatureSuggestion) -> Unit,
     resetLearning: () -> Unit,
+    savePersonalPreset: (String, Double) -> Unit,
+    deletePersonalPreset: (Long) -> Unit,
     setHeating: (Boolean) -> Unit,
     setGear: (Int) -> Unit,
     setUnit: (TemperatureUnit) -> Unit,
@@ -132,21 +134,27 @@ fun AmugApp(
     setChargeLight: (Boolean) -> Unit,
     setSleepTimer: (Int?) -> Unit,
     refresh: () -> Unit,
+    reconnect: () -> Unit,
+    disconnect: () -> Unit,
+    clearEvents: () -> Unit,
+    exportDiagnostics: (String) -> Unit,
     selectMug: (Long) -> Unit,
     renameMug: (Long, String) -> Unit,
     forgetMug: (Long) -> Unit,
     clearHistory: () -> Unit,
     setHistoryRetention: (Int) -> Unit,
+    alertPreferences: GlobalPreferences,
+    setAlert: (AlertKind, Boolean) -> Unit,
 ) {
     var showMugs by remember { mutableStateOf(false) }
-    AnimatedContent(state.stage == ConnectionStage.READY, label = "connection screen") { connected ->
+    AnimatedContent(state.status != null || state.stage == ConnectionStage.READY, label = "connection screen") { connected ->
         if (!connected) {
             DiscoveryScreen(state, scan, connect) { showMugs = true }
         } else {
             ConnectedScreen(
-                state, preferences, presets, suggestion, setTemperature, applyPreset, applySuggestion, saveSuggestion, resetLearning, setHeating, setGear, setUnit,
+                state, preferences, presets, suggestion, setTemperature, applyPreset, applySuggestion, saveSuggestion, resetLearning, savePersonalPreset, deletePersonalPreset, setHeating, setGear, setUnit,
                 setTemperatureLed, setLedColor, resetLedPalette, setSafetyWait, setMusicMode,
-                setHoldLight, setChargeLight, setSleepTimer, refresh,
+                setHoldLight, setChargeLight, setSleepTimer, alertPreferences, setAlert, refresh, reconnect, disconnect, clearEvents, exportDiagnostics,
             ) { showMugs = true }
         }
     }
@@ -170,6 +178,8 @@ private fun ConnectedScreen(
     applySuggestion: (TemperatureSuggestion) -> Unit,
     saveSuggestion: (TemperatureSuggestion) -> Unit,
     resetLearning: () -> Unit,
+    savePersonalPreset: (String, Double) -> Unit,
+    deletePersonalPreset: (Long) -> Unit,
     setHeating: (Boolean) -> Unit,
     setGear: (Int) -> Unit,
     setUnit: (TemperatureUnit) -> Unit,
@@ -181,7 +191,13 @@ private fun ConnectedScreen(
     setHoldLight: (Boolean) -> Unit,
     setChargeLight: (Boolean) -> Unit,
     setSleepTimer: (Int?) -> Unit,
+    alertPreferences: GlobalPreferences,
+    setAlert: (AlertKind, Boolean) -> Unit,
     refresh: () -> Unit,
+    reconnect: () -> Unit,
+    disconnect: () -> Unit,
+    clearEvents: () -> Unit,
+    exportDiagnostics: (String) -> Unit,
     manageMugs: () -> Unit,
 ) {
     var destination by remember { mutableStateOf(Destination.HOME) }
@@ -231,11 +247,11 @@ private fun ConnectedScreen(
                     }
                 }
                 Box(Modifier.weight(1f).fillMaxHeight()) {
-                    if (showTechnical) TechnicalDestination(state) else when (destination) {
-                        Destination.HOME -> HomeDestination(state, preferences.unit, suggestion, setTemperature, applySuggestion, saveSuggestion, setHeating, setGear)
-                        Destination.DRINKS -> DrinksDestination(state, preferences.unit, presets, applyPreset)
+                    if (showTechnical) TechnicalDestination(state, clearEvents, exportDiagnostics) else when (destination) {
+                        Destination.HOME -> HomeDestination(state, preferences.unit, suggestion, setTemperature, applySuggestion, saveSuggestion, setHeating, setGear, setSleepTimer)
+                        Destination.DRINKS -> DrinksDestination(state, preferences.unit, presets, applyPreset, savePersonalPreset, deletePersonalPreset)
                         Destination.LIGHTING -> LightingDestination(state, preferences, setTemperatureLed, setLedColor, resetLedPalette, setMusicMode, setHoldLight, setChargeLight)
-                        Destination.SETTINGS -> SettingsDestination(state, preferences.unit, setUnit, setSafetyWait, manageMugs, resetLearning) { showTechnical = true }
+                        Destination.SETTINGS -> SettingsDestination(state, preferences.unit, setUnit, setSafetyWait, manageMugs, resetLearning, alertPreferences, setAlert, reconnect, disconnect) { showTechnical = true }
                     }
                 }
             }
@@ -270,6 +286,7 @@ private fun HomeDestination(
     saveSuggestion: (TemperatureSuggestion) -> Unit,
     setHeating: (Boolean) -> Unit,
     setGear: (Int) -> Unit,
+    setSleepTimer: (Int?) -> Unit,
 ) {
     val status = state.status
     val insight = remember(state.telemetry) { ThermalIntelligence.analyze(state.telemetry) }
@@ -309,6 +326,20 @@ private fun HomeDestination(
                     }
                 }
             }
+        }
+        item {
+            Text("Sleep timer", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Phone-supervised · AMUG must remain connected", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            state.sleepTimerEndsAt?.let { end ->
+                val minutes = ((end - System.currentTimeMillis()).coerceAtLeast(0) / 60_000) + 1
+                Text("About $minutes minutes remaining", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(15, 30, 60, 120).forEach { minutes ->
+                    FilterChip(selected = false, onClick = { setSleepTimer(minutes) }, label = { Text(if (minutes < 60) "$minutes m" else "2 h") }, enabled = status != null, modifier = Modifier.weight(1f))
+                }
+            }
+            if (state.sleepTimerEndsAt != null) TextButton(onClick = { setSleepTimer(null) }) { Text("Cancel timer") }
         }
         if (status?.empty == true) item { WarningCard("Mug empty", "Temperature hold stopped. Add liquid before turning hold on.") }
         if (status?.nightLightEnabled == true) item { WarningCard("Lighting is active", "Ambient lighting and temperature hold cannot run together.") }
@@ -457,8 +488,9 @@ private val approvedFahrenheit = mapOf(
 )
 
 @Composable
-private fun DrinksDestination(state: BleState, unit: TemperatureUnit, presets: List<PresetEntity>, applyPreset: (PresetEntity) -> Unit) {
+private fun DrinksDestination(state: BleState, unit: TemperatureUnit, presets: List<PresetEntity>, applyPreset: (PresetEntity) -> Unit, savePreset: (String, Double) -> Unit, deletePreset: (Long) -> Unit) {
     var selectedCategory by remember { mutableStateOf("Coffee") }
+    var showCustom by remember { mutableStateOf(false) }
     DestinationList {
         item {
             Text("Choose a holding temperature", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -475,7 +507,26 @@ private fun DrinksDestination(state: BleState, unit: TemperatureUnit, presets: L
             val preset = presets.firstOrNull { it.name == name }
             if (preset != null) item(key = preset.id) { DrinkPresetCard(preset, state.status?.targetC, unit, applyPreset) }
         }
+        val personal = presets.filterNot(PresetEntity::approved)
+        if (personal.isNotEmpty()) {
+            item { Text("My presets", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
+            personal.forEach { preset -> item(key = preset.id) { PersonalPresetRow(preset, state.status?.targetC, unit, applyPreset, deletePreset) } }
+        }
+        item { OutlinedButton(onClick = { showCustom = true }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Icon(Icons.Rounded.Add, null); Text("Create custom preset", modifier = Modifier.padding(start = 8.dp)) } }
     }
+    if (showCustom) CustomPresetDialog(unit, { showCustom = false }) { name, celsius -> savePreset(name, celsius); showCustom = false }
+}
+
+@Composable
+private fun PersonalPresetRow(preset: PresetEntity, currentTargetC: Double?, unit: TemperatureUnit, applyPreset: (PresetEntity) -> Unit, deletePreset: (Long) -> Unit) {
+    val celsius = preset.temperatureCentiC / 100.0
+    ListItem(headlineContent = { Text(preset.name, fontWeight = FontWeight.Bold) }, supportingContent = { Text("${unit.display(celsius).roundToInt()}${unit.symbol} · personal") }, trailingContent = { Row { TextButton(onClick = { deletePreset(preset.id) }) { Text("Delete") }; FilledTonalButton(onClick = { applyPreset(preset) }, enabled = currentTargetC == null || abs(currentTargetC - celsius) >= .05) { Text("Apply") } } }, colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer))
+}
+
+@Composable
+private fun CustomPresetDialog(unit: TemperatureUnit, dismiss: () -> Unit, save: (String, Double) -> Unit) {
+    var name by remember { mutableStateOf("") }; var temperature by remember { mutableStateOf(if (unit == TemperatureUnit.FAHRENHEIT) "135" else "57") }; val value = temperature.toDoubleOrNull(); val celsius = value?.let(unit::toCelsius); val valid = name.trim().isNotEmpty() && celsius != null && celsius in 48.0..66.0
+    Dialog(onDismissRequest = dismiss) { Card { Column(Modifier.padding(24.dp)) { Text("Custom preset", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); OutlinedTextField(name, { name = it.take(30) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)); OutlinedTextField(temperature, { temperature = it.filter { c -> c.isDigit() || c == '.' }.take(5) }, label = { Text("Temperature ${unit.symbol}") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)); Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) { TextButton(onClick = dismiss) { Text("Cancel") }; Button(onClick = { save(name.trim(), celsius!!) }, enabled = valid) { Text("Save") } } } } }
 }
 
 @Composable
@@ -617,6 +668,10 @@ private fun SettingsDestination(
     setSafetyWait: (Int) -> Unit,
     manageMugs: () -> Unit,
     resetLearning: () -> Unit,
+    alertPreferences: GlobalPreferences,
+    setAlert: (AlertKind, Boolean) -> Unit,
+    reconnect: () -> Unit,
+    disconnect: () -> Unit,
     openTechnical: () -> Unit,
 ) {
     DestinationList {
@@ -638,6 +693,17 @@ private fun SettingsDestination(
             }
         }
         item { HorizontalDivider() }
+        item { Text("Alerts", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) }
+        item {
+            Column {
+                AlertSwitch("Drink ready", "Notify after stable target readings", alertPreferences.readyAlert) { setAlert(AlertKind.READY, it) }
+                AlertSwitch("Mug empty", "Notify when dry-boil protection reports empty", alertPreferences.emptyAlert) { setAlert(AlertKind.EMPTY, it) }
+                AlertSwitch("Low battery", "Notify at 15%", alertPreferences.lowBatteryAlert) { setAlert(AlertKind.LOW_BATTERY, it) }
+                AlertSwitch("Disconnected", "Notify when AMUG starts reconnecting", alertPreferences.disconnectAlert) { setAlert(AlertKind.DISCONNECT, it) }
+                AlertSwitch("Very hot", "Notify at 140°F / 60°C", alertPreferences.hotAlert) { setAlert(AlertKind.HOT, it) }
+            }
+        }
+        item { HorizontalDivider() }
         item { Text("Safety", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) }
         if (state.profile == MugProfile.S6_PLUS) item {
             Column {
@@ -653,6 +719,7 @@ private fun SettingsDestination(
         }
         item { HorizontalDivider() }
         item { Text("Device & data", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick = reconnect, modifier = Modifier.weight(1f)) { Text("Reconnect") }; OutlinedButton(onClick = disconnect, modifier = Modifier.weight(1f)) { Text("Disconnect") } } }
         item {
             Surface(onClick = manageMugs, color = Color.Transparent) {
                 ListItem(
@@ -676,6 +743,11 @@ private fun SettingsDestination(
 }
 
 @Composable
+private fun AlertSwitch(title: String, supporting: String, checked: Boolean, change: (Boolean) -> Unit) {
+    ListItem(headlineContent = { Text(title) }, supportingContent = { Text(supporting) }, trailingContent = { Switch(checked, change, modifier = Modifier.semantics { contentDescription = title }) }, colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent))
+}
+
+@Composable
 private fun SettingsCard(title: String, supporting: String, content: @Composable ColumnScope.() -> Unit) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(24.dp)) {
         Column(Modifier.padding(20.dp)) {
@@ -687,7 +759,7 @@ private fun SettingsCard(title: String, supporting: String, content: @Composable
 }
 
 @Composable
-private fun TechnicalDestination(state: BleState) {
+private fun TechnicalDestination(state: BleState, clearEvents: () -> Unit, export: (String) -> Unit) {
     val profile = state.profile
     DestinationList {
         item { TechnicalCard("Connection") {
@@ -725,7 +797,19 @@ private fun TechnicalDestination(state: BleState) {
                 Text(event.message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(14.dp))
             }
         }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onClick = clearEvents, modifier = Modifier.weight(1f)) { Text("Clear log") }; Button(onClick = { export(buildDiagnostics(state)) }, modifier = Modifier.weight(1f)) { Text("Share report") } } }
     }
+}
+
+private fun buildDiagnostics(state: BleState) = buildString {
+    appendLine("AMUG diagnostics")
+    appendLine("Device: ${state.connectedName ?: "unknown"}")
+    appendLine("Stage: ${state.stage}")
+    appendLine("Profile: ${state.profile}")
+    appendLine("Firmware: ${state.version?.firmware ?: "unknown"}; hardware: ${state.version?.hardware ?: "unknown"}")
+    appendLine("Hold=${state.status?.maintenanceEnabled} empty=${state.status?.empty} charging=${state.status?.charging}")
+    appendLine("Recent events (BLE address omitted):")
+    state.events.takeLast(60).forEach { appendLine(it.message) }
 }
 
 @Composable

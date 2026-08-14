@@ -12,6 +12,9 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
@@ -89,6 +92,29 @@ class MugBleClient(
     private var lastTemperatureColor: Int? = null
     private var polling: Runnable? = null
     private val found = linkedMapOf<String, MugDevice>()
+    private val adapterReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED) return
+            val adapterState = intent.getIntExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, android.bluetooth.BluetoothAdapter.ERROR)
+            handler.post {
+                when (adapterState) {
+                    android.bluetooth.BluetoothAdapter.STATE_OFF, android.bluetooth.BluetoothAdapter.STATE_TURNING_OFF -> {
+                        reconnectRequestId++
+                        closeGatt()
+                        if (!intentionalDisconnect && desiredDevice != null) update(state.copy(stage = ConnectionStage.RECONNECTING, error = "Bluetooth is off"))
+                    }
+                    android.bluetooth.BluetoothAdapter.STATE_ON -> desiredDevice?.let { device ->
+                        if (!intentionalDisconnect && state.stage != ConnectionStage.READY) {
+                            reconnectAttempts = 0
+                            startConnection(device, reconnect = true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    init { appContext.registerReceiver(adapterReceiver, IntentFilter(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)) }
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -303,6 +329,7 @@ class MugBleClient(
     }
 
     fun refresh() = handler.post { enqueue(QueuedWrite(MugProtocol.requestStatus, "Refresh status")) }
+    fun clearEvents() = handler.post { update(state.copy(events = emptyList())) }
 
     fun disconnect() = handler.post {
         reconnectRequestId++
@@ -319,6 +346,7 @@ class MugBleClient(
             intentionalDisconnect = true
             desiredDevice = null
             closeGatt()
+            runCatching { appContext.unregisterReceiver(adapterReceiver) }
             thread.quitSafely()
         }
     }
@@ -345,7 +373,7 @@ class MugBleClient(
                 stage = if (reconnect) ConnectionStage.RECONNECTING else ConnectionStage.CONNECTING,
                 connectedName = device.name,
                 profile = null,
-                status = null,
+                status = if (reconnect) state.status else null,
                 version = null,
                 commandState = CommandState.IDLE,
                 error = null,
@@ -391,15 +419,15 @@ class MugBleClient(
         val write = writes.removeFirst()
         activeWrite = write
         log("TX ${write.value.hex()}  ${write.label}")
-        val started = if (Build.VERSION.SDK_INT >= 33) {
-            g.writeCharacteristic(characteristic, write.value, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) == BluetoothStatusCodes.SUCCESS
-        } else {
-            @Suppress("DEPRECATION")
-            run {
-                characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                characteristic.value = write.value
-                g.writeCharacteristic(characteristic)
+        val started = try {
+            if (Build.VERSION.SDK_INT >= 33) g.writeCharacteristic(characteristic, write.value, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) == BluetoothStatusCodes.SUCCESS
+            else {
+                @Suppress("DEPRECATION")
+                run { characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT; characteristic.value = write.value; g.writeCharacteristic(characteristic) }
             }
+        } catch (error: RuntimeException) {
+            log("Bluetooth transport unavailable: ${error.javaClass.simpleName}")
+            false
         }
         if (!started) {
             activeWrite = null
@@ -473,7 +501,7 @@ class MugBleClient(
             val requestId = ++reconnectRequestId
             val delay = 750L * reconnectAttempts
             log("$message; reconnect ${reconnectAttempts}/3 in ${delay}ms")
-            update(state.copy(stage = ConnectionStage.RECONNECTING, error = message, status = null))
+            update(state.copy(stage = ConnectionStage.RECONNECTING, error = message))
             handler.postDelayed({ if (!intentionalDisconnect && desiredDevice == device && reconnectRequestId == requestId) startConnection(device, true) }, delay)
         } else fail(message, reconnect = false)
     }
@@ -486,7 +514,7 @@ class MugBleClient(
             state.copy(
                 stage = ConnectionStage.ERROR,
                 profile = null,
-                status = null,
+                status = state.status,
                 version = null,
                 commandState = CommandState.FAILED,
                 commandMessage = message,

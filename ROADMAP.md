@@ -134,6 +134,18 @@ features, open checks, and recent raw BLE events.
   a decline of at least three percentage points
 - Estimates disappear when stale, charging, noisy, or insufficiently supported
 
+## 0.3.0 RC1
+
+- Confirmed-only target learning with source/preset provenance
+- Create/apply/delete personal presets
+- Independent ready/empty/battery/disconnect/hot alert preferences, default off
+- Notification permission requested only after enabling an alert
+- Home sleep timer restored with best-effort disclosure
+- Explicit reconnect/disconnect and redacted diagnostics sharing
+- Bluetooth adapter-state recovery prevents binder-death crashes
+- Full physical music/ambient lighting matrix validated and restored
+- Pixel tile, background, rotation, reconnect, ANR, and service checks complete
+
 ## Revision 1 — Hardware-safe controls
 
 Goal: validate each daily-use control against the real S6 Plus without unsafe

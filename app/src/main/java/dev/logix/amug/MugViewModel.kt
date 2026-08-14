@@ -37,6 +37,7 @@ data class UserPreferences(
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class MugViewModel(application: Application) : AndroidViewModel(application) {
+    private data class PendingChoice(val celsius: Double, val source: String, val presetName: String?)
     private val mutableState = MutableStateFlow(BleState())
     val state = mutableState.asStateFlow()
     private val repository = MugRepository(application)
@@ -53,13 +54,33 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
     val preferences = mutablePreferences.asStateFlow()
     private var service: MugConnectionService.LocalBinder? = null
     private var stateJob: Job? = null
+    private var pendingChoice: PendingChoice? = null
+    private var lastCommandState = CommandState.IDLE
     private val pendingCommands = mutableListOf<(MugConnectionService.LocalBinder) -> Unit>()
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
             val connected = binder as MugConnectionService.LocalBinder
             service = connected
             stateJob?.cancel()
-            stateJob = viewModelScope.launch { connected.state.collect { mutableState.value = it } }
+            stateJob = viewModelScope.launch {
+                connected.state.collect { next ->
+                    mutableState.value = next
+                    if (next.commandState != lastCommandState) {
+                        when (next.commandState) {
+                            CommandState.CONFIRMED -> pendingChoice?.let { choice ->
+                                selectedMug.value?.id?.let { mugId ->
+                                    viewModelScope.launch { repository.recordTargetChoice(mugId, (choice.celsius * 100).roundToInt(), choice.source, choice.presetName) }
+                                }
+                                pendingChoice = null
+                            }
+                            CommandState.FAILED -> pendingChoice = null
+                            else -> Unit
+                        }
+                        lastCommandState = next.commandState
+                    }
+                    if (next.stage in setOf(ConnectionStage.IDLE, ConnectionStage.ERROR)) pendingChoice = null
+                }
+            }
             pendingCommands.toList().also { pendingCommands.clear() }.forEach { it(connected) }
             if (connected.state.value.stage in setOf(ConnectionStage.IDLE, ConnectionStage.ERROR)) connected.connectLast()
         }
@@ -108,8 +129,8 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
     fun applyPreset(preset: PresetEntity) = setTemperatureChoice(preset.temperatureCentiC / 100.0, "preset", preset.name)
     fun applySuggestion(suggestion: TemperatureSuggestion) = setTemperatureChoice(suggestion.targetCentiC / 100.0, "suggestion", null)
     private fun setTemperatureChoice(celsius: Double, source: String, presetName: String?) {
+        pendingChoice = PendingChoice(celsius, source, presetName)
         withService { it.setTemperature(celsius) }
-        selectedMug.value?.id?.let { mugId -> viewModelScope.launch { repository.recordTargetChoice(mugId, (celsius * 100).roundToInt(), source, presetName) } }
     }
     fun setMaintenanceEnabled(enabled: Boolean) {
         if (enabled && mutablePreferences.value.temperatureLed) setTemperatureLed(false)
@@ -143,6 +164,7 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
         withService { it.setTemperatureLedPalette(palette) }
     }
     fun refresh() = withService { it.refresh() }
+    fun clearEvents() = withService { it.clearEvents() }
 
     fun selectMug(id: Long) {
         if (selectedMug.value?.id == id) return
@@ -164,12 +186,15 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
         else selectedMug.value?.id?.let { id -> viewModelScope.launch { repository.clearHistory(id) } }
     }
     fun setHistoryRetention(days: Int) = viewModelScope.launch { repository.setHistoryRetention(days); repository.pruneHistory() }
+    fun setAlert(kind: AlertKind, enabled: Boolean) = viewModelScope.launch { repository.setAlert(kind, enabled) }
     fun saveSuggestionAsPreset(suggestion: TemperatureSuggestion) {
         val mugId = selectedMug.value?.id ?: return
         val fahrenheit = ((suggestion.targetCentiC / 100.0) * 9 / 5 + 32).roundToInt()
         viewModelScope.launch { repository.savePersonalPreset(mugId, "My $fahrenheit°F", suggestion.targetCentiC) }
     }
     fun resetLearning() { selectedMug.value?.id?.let { id -> viewModelScope.launch { repository.clearLearning(id) } } }
+    fun savePersonalPreset(name: String, celsius: Double) { selectedMug.value?.id?.let { id -> viewModelScope.launch { repository.savePersonalPreset(id, name, (celsius * 100).roundToInt()) } } }
+    fun deletePersonalPreset(id: Long) = viewModelScope.launch { repository.deletePreset(id) }
 
     private fun saveCurrentMugPreferences(preferences: UserPreferences) {
         val mugId = selectedMug.value?.id ?: return

@@ -207,6 +207,13 @@ when freshness/confidence/safety gates fail
 - Both features suppress themselves when samples are stale, charging, noisy, or
   insufficient; no cloud processing or fabricated confidence percentage
 
+## 0.3.0 RC1
+
+RC1 closes the primary release workflows: confirmed-only learning, custom
+presets, opt-in alert settings, visible sleep timer, reconnect/disconnect,
+diagnostics clear/share, Bluetooth-off recovery, and the physically validated
+lighting matrix. See [RC1_VALIDATION.md](RC1_VALIDATION.md).
+
 ## Status
 
 - [x] BLE protocol extracted and documented

@@ -16,8 +16,8 @@ android {
         applicationId = "dev.logix.amug"
         minSdk = 31
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.2.0-alpha7"
+        versionCode = 9
+        versionName = "0.3.0-rc1"
     }
 
     buildFeatures {
