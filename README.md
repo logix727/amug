@@ -200,6 +200,13 @@ when freshness/confidence/safety gates fail
 - Suggestions can be applied or saved as personal presets and reset locally
 - Room schema migration preserves existing mugs, history, settings, and presets
 
+### v0.2 alpha 7
+
+- Adds sustained target-overshoot warnings without diagnosing hardware failure
+- Adds local battery-runtime ranges only after meaningful unplugged discharge
+- Both features suppress themselves when samples are stale, charging, noisy, or
+  insufficient; no cloud processing or fabricated confidence percentage
+
 ## Status
 
 - [x] BLE protocol extracted and documented

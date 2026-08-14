@@ -418,7 +418,7 @@ class MugBleClient(
         cancelPhaseTimeout()
         val now = System.currentTimeMillis()
         reconnectAttempts = 0
-        val point = TelemetryPoint(now, status.currentC, status.targetC, status.maintenanceEnabled, status.empty)
+        val point = TelemetryPoint(now, status.currentC, status.targetC, status.maintenanceEnabled, status.empty, status.batteryPercent, status.charging)
         update(state.copy(status = status, stage = ConnectionStage.READY, lastUpdatedAt = now, telemetry = (state.telemetry + point).takeLast(20), error = null))
         schedulePoll()
         awaitingVerification?.let { pending ->

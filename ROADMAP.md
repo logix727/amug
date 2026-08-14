@@ -126,6 +126,14 @@ features, open checks, and recent raw BLE events.
 - Suggestions can be applied, saved as a personal preset, or reset in Settings
 - All learning remains local, per mug, bounded to the validated temperature range
 
+## Alpha 7 safety and runtime insights
+
+- Sustained overshoot warning requires two samples at least 2°C above a stable
+  target over at least one minute
+- Battery runtime range requires unplugged samples over at least 20 minutes and
+  a decline of at least three percentage points
+- Estimates disappear when stale, charging, noisy, or insufficiently supported
+
 ## Revision 1 — Hardware-safe controls
 
 Goal: validate each daily-use control against the real S6 Plus without unsafe

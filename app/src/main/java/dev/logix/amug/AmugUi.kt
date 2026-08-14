@@ -273,6 +273,8 @@ private fun HomeDestination(
 ) {
     val status = state.status
     val insight = remember(state.telemetry) { ThermalIntelligence.analyze(state.telemetry) }
+    val overshoot = remember(state.telemetry) { ThermalIntelligence.overshootWarning(state.telemetry) }
+    val runtime = remember(state.telemetry) { ThermalIntelligence.batteryRuntime(state.telemetry) }
     var target by remember(status?.targetC, unit) { mutableDoubleStateOf(unit.display(status?.targetC ?: 57.0)) }
     var showTemperatureEntry by remember { mutableStateOf(false) }
     DestinationList {
@@ -319,6 +321,14 @@ private fun HomeDestination(
                         leadingContent = { Icon(Icons.Rounded.Info, null) },
                         colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
                     )
+                }
+            }
+        }
+        overshoot?.let { warning -> item { WarningCard("Unusual temperature behavior", warning) } }
+        runtime?.let { estimate ->
+            item {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(20.dp)) {
+                    ListItem(headlineContent = { Text("Estimated battery runtime", fontWeight = FontWeight.Bold) }, supportingContent = { Text("About ${formatDuration(estimate.first)}–${formatDuration(estimate.last)} at recent usage · learned locally") }, leadingContent = { Icon(Icons.Rounded.BatteryChargingFull, null) }, colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent))
                 }
             }
         }
@@ -406,6 +416,8 @@ private fun formatDelta(delta: Double, unit: TemperatureUnit): String = when {
     delta < 0 -> "${abs(delta).roundToInt()}${unit.symbol} below"
     else -> "${delta.roundToInt()}${unit.symbol} above"
 }
+
+private fun formatDuration(minutes: Int): String = if (minutes < 60) "$minutes min" else "${minutes / 60}h ${minutes % 60}m"
 
 @Composable
 private fun WarningCard(title: String, message: String) {
