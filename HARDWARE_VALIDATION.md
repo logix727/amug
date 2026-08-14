@@ -87,6 +87,30 @@ the firmware intentionally disables temperature hold when night light is on.
 The scripts used are `tools/validate_setpoint.py` and
 `tools/validate_settings.py`.
 
+## Android alpha 3 validation — August 14, 2026
+
+The alpha 2 freeze was reproduced and diagnosed as a main-thread ANR caused by
+synchronous Room/DataStore/Glance work. Alpha 3 removed all production
+`runBlocking` calls and moved migration/snapshot work off the main thread.
+
+Pixel 10 Pro XL alpha 3 results:
+
+- Cold launch: 494 ms
+- 25-second idle/resume check: no input ANR, service timeout, or crash
+- Scan found `S6-PLUS-0455` at approximately -67 dBm
+- Android GATT connected, discovered A300, enabled A302 notifications
+- Version response: `0201010035010001`
+- Status response: `0301102862362C02FFD10016630006FC20B8000000`
+- Dashboard decoded 106°F, 130°F target, 99%, charging, hold off
+- AMUG sent `0601`, received `0601`, queried `03`, and confirmed hold enabled
+- Temperature rose from approximately 104°F to 113°F while hold was enabled,
+  confirming the mug was heating toward 130°F
+- Foreground connected-device notification was present
+- No ANR occurred during scan, connect, command, readback, scrolling, or refresh
+
+Alpha 3 also emits the bounded protocol stream to Logcat under `AMUG-BLE` and
+shows the same TX/RX data in its Technical & Roadmap console.
+
 Protocol research confirms the S6 Plus firmware automatically disables
 temperature hold when night-light mode is enabled. AMUG therefore presents
 temperature glow as an explicit ambient mode and never enables it silently.

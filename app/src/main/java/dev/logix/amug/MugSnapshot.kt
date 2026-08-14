@@ -19,12 +19,12 @@ data class MugSnapshot(
 class MugSnapshotStore(context: Context) {
     private val repository = MugRepository(context.applicationContext)
 
-    fun read(): MugSnapshot = kotlinx.coroutines.runBlocking {
+    suspend fun read(): MugSnapshot {
         repository.migrateLegacyPreferences()
         val global = repository.globalPreferences.first()
         val mug = repository.selectedMugNow()
         val snapshot = mug?.let { repository.latestSnapshot(it.id) }
-        MugSnapshot(
+        return MugSnapshot(
             name = mug?.name,
             address = mug?.bleAddress,
             currentC = snapshot?.currentCentiC?.div(100.0),

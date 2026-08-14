@@ -6,12 +6,20 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class MugTileService : TileService() {
+    private val scope = CoroutineScope(Job() + Dispatchers.Main.immediate)
+
     override fun onStartListening() {
         super.onStartListening()
-        val snapshot = MugSnapshotStore(this).read()
-        qsTile?.apply {
+        scope.launch {
+          val snapshot = MugSnapshotStore(this@MugTileService).read()
+          qsTile?.apply {
             state = when {
                 snapshot.address == null -> Tile.STATE_UNAVAILABLE
                 snapshot.connected -> Tile.STATE_ACTIVE
@@ -24,26 +32,31 @@ class MugTileService : TileService() {
                 else -> "No remembered mug"
             }
             updateTile()
+          }
         }
     }
 
     override fun onClick() {
         super.onClick()
-        val snapshot = MugSnapshotStore(this).read()
-        if (snapshot.address == null) return openApp()
-        unlockAndRun {
-            val intent = Intent(this, MugConnectionService::class.java).setAction(
+        scope.launch {
+          val snapshot = MugSnapshotStore(this@MugTileService).read()
+          if (snapshot.address == null) return@launch openApp()
+          unlockAndRun {
+            val intent = Intent(this@MugTileService, MugConnectionService::class.java).setAction(
                 if (snapshot.connected) MugConnectionService.ACTION_DISCONNECT else MugConnectionService.ACTION_CONNECT_LAST,
             )
             try {
-                if (snapshot.connected) startService(intent) else ContextCompat.startForegroundService(this, intent)
+                if (snapshot.connected) startService(intent) else ContextCompat.startForegroundService(this@MugTileService, intent)
             } catch (_: android.app.ForegroundServiceStartNotAllowedException) {
                 openApp()
             } catch (_: SecurityException) {
                 openApp()
             }
+          }
         }
     }
+
+    override fun onDestroy() { scope.cancel(); super.onDestroy() }
 
     private fun openApp() {
         val intent = Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

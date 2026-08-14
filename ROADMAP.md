@@ -88,6 +88,11 @@ charge light. Remaining physical checks are Android alpha 2 lifecycle/reconnect,
 music effects, ambient mode while hold is deliberately off, notifications,
 tile, and widget.
 
+Android alpha 3 now completes scan/connect/version/status, enables hold with
+readback confirmation, and demonstrates a physical heating trend. The in-app
+Technical & Roadmap console exposes UUIDs, protocol commands, flags, validated
+features, open checks, and recent raw BLE events.
+
 ## Revision 1 — Hardware-safe controls
 
 Goal: validate each daily-use control against the real S6 Plus without unsafe

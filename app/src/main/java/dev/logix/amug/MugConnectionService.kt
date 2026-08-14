@@ -28,7 +28,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.math.roundToInt
@@ -84,19 +83,26 @@ class MugConnectionService : Service() {
     private var previousEmpty = false
     private var previousLowBattery = false
     private var previousStage = ConnectionStage.IDLE
+    private var lastNotificationKey: List<Any?>? = null
     private val persistenceMutex = Mutex()
     private var activeMugId: Long? = null
     private var activeSessionId: Long? = null
     private var activeSessionMugId: Long? = null
     private var lastSample: SessionSampleEntity? = null
+    private var repositoryReady = false
 
     override fun onCreate() {
         super.onCreate()
         snapshots = MugSnapshotStore(this)
         repository = MugRepository(this)
-        runBlocking { repository.migrateLegacyPreferences(); repository.closeAbandonedSessions(); repository.pruneHistory() }
         createNotificationChannel()
         client = MugBleClient(this, ::onBleState)
+        scope.launch(Dispatchers.IO) {
+            repository.migrateLegacyPreferences()
+            repository.closeAbandonedSessions()
+            repository.pruneHistory()
+            repositoryReady = true
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
@@ -104,8 +110,7 @@ class MugConnectionService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_CONNECT_LAST -> {
-                if (runBlocking { repository.selectedMugNow() } == null) stopSelf()
-                else if (ensureForeground() && !connectLast()) stopIdleForeground()
+                if (ensureForeground()) scope.launch { if (!connectLastAsync()) stopIdleForeground() }
             }
             ACTION_DISCONNECT -> client.disconnect()
         }
@@ -114,9 +119,8 @@ class MugConnectionService : Service() {
 
     override fun onDestroy() {
         LiveMugConnection.mugId = null
-        runBlocking { finishSession("service stopped") }
         TileService.requestListeningState(this, ComponentName(this, MugTileService::class.java))
-        runBlocking { MugWidget().updateAll(this@MugConnectionService) }
+        scope.launch(Dispatchers.IO) { finishSession("service stopped"); MugWidget().updateAll(this@MugConnectionService) }
         client.shutdown()
         scope.cancel()
         super.onDestroy()
@@ -124,7 +128,14 @@ class MugConnectionService : Service() {
 
     private fun connectLast(): Boolean {
         if (mutableState.value.stage !in setOf(ConnectionStage.IDLE, ConnectionStage.ERROR)) return false
-        val mug = runBlocking { repository.selectedMugNow() } ?: return false
+        scope.launch { connectLastAsync() }
+        return true
+    }
+
+    private suspend fun connectLastAsync(): Boolean {
+        while (!repositoryReady) delay(25)
+        if (mutableState.value.stage !in setOf(ConnectionStage.IDLE, ConnectionStage.ERROR)) return false
+        val mug = repository.selectedMugNow() ?: return false
         return runBle { scope.launch { connectRemembered(MugDevice(mug.advertisedName, mug.bleAddress, 0)) } }
     }
 
@@ -169,7 +180,11 @@ class MugConnectionService : Service() {
     private fun onBleState(state: BleState) {
         val published = state.copy(sleepTimerEndsAt = sleepTimerEndsAt)
         mutableState.value = published
-        if (foreground) getSystemService<NotificationManager>()?.notify(NOTIFICATION_ID, buildNotification(published))
+        val notificationKey = listOf(published.stage, published.connectedName, published.status?.currentC?.roundToInt(), published.status?.targetC?.roundToInt(), published.status?.batteryPercent)
+        if (foreground && notificationKey != lastNotificationKey) {
+            lastNotificationKey = notificationKey
+            getSystemService<NotificationManager>()?.notify(NOTIFICATION_ID, buildNotification(published))
+        }
         publishAlerts(published)
 
         val snapshotKey = listOf(state.stage, state.connectedName, state.status?.currentC, state.status?.targetC, state.lastUpdatedAt)
@@ -266,7 +281,7 @@ class MugConnectionService : Service() {
         val status = state.status
         val stage = state.stage.name.lowercase().replaceFirstChar(Char::uppercaseChar)
         val temperatures = if (status == null) stage
-        else "${status.currentC.roundToInt()} C / target ${status.targetC.roundToInt()} C - $stage"
+        else "${fahrenheit(status.currentC)}°F / target ${fahrenheit(status.targetC)}°F - $stage"
         val openApp = PendingIntent.getActivity(
             this,
             0,

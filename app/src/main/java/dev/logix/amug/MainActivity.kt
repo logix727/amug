@@ -611,13 +611,20 @@ private fun DiagnosticsDialog(state: BleState, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(28.dp)) {
             LazyColumn(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { Text("Diagnostics", fontSize = 24.sp, fontWeight = FontWeight.Black) }
+                item { Text("Technical & roadmap", fontSize = 24.sp, fontWeight = FontWeight.Black) }
                 item { Text("Device: ${state.connectedName ?: "Not connected"}") }
                 item { Text("Profile: ${state.profile ?: "Unknown"}") }
                 item { Text("Firmware: ${state.version?.firmware ?: "Unknown"} · Hardware: ${state.version?.hardware ?: "Not reported"}") }
                 item { Text("Connection: ${state.stage}") }
+                item { Text("Service A300… · Write A301… · Notify A302… · OTA A303…", fontSize = 12.sp) }
+                item { Text("Status 03 · Target 04 <C integer> <hundredths> · Hold 06 01 · Off 06 00", fontSize = 12.sp) }
                 item { Text("Auto-off: ${state.status?.safetyWaitHours?.let { "$it hours" } ?: "Unknown"}") }
                 item { Text("Battery voltage: ${state.status?.batteryMillivolts?.let { "$it mV" } ?: "Unknown"}") }
+                item { Text("State flags: hold=${state.status?.maintenanceEnabled} empty=${state.status?.empty} charging=${state.status?.charging} night=${state.status?.nightLightEnabled}", fontSize = 12.sp) }
+                item { Text("Hardware validation", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
+                item { Text("✓ Live status/version  ✓ 130→131→130°F  ✓ 2h↔4h auto-off  ✓ hold/charge lights  ✓ Android hold enable + heating trend") }
+                item { Text("Roadmap", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
+                item { Text("✓ Reliable BLE/readback  ✓ Fahrenheit/presets  ✓ Alerts/timers  ✓ Lighting  ✓ Tile/widget  ✓ Multi-mug/history  ◻ Ambient/music physical checks  ◻ Stable signed release") }
                 item { Text("Recent BLE events", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
                 items(state.events.asReversed().take(30)) { event -> Text(event.message, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 item { Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Close") } }

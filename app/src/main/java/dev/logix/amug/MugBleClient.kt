@@ -17,6 +17,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.ParcelUuid
 import android.os.SystemClock
+import android.util.Log
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -154,10 +155,15 @@ class MugBleClient(
             if (!isCurrent(g)) return@post
             cancelPhaseTimeout()
             if (status != BluetoothGatt.GATT_SUCCESS) return@post fail("Notification setup failed ($status)")
-            log("Notifications enabled; requesting device snapshot")
-            enqueue(QueuedWrite(MugProtocol.requestVersion, "Read version"))
-            enqueue(QueuedWrite(MugProtocol.requestStatus, "Read status"))
-            armPhaseTimeout("Mug did not return initial status", 8_000)
+            log("Notifications enabled; settling before snapshot")
+            handler.postDelayed({
+                if (!isCurrent(g)) return@postDelayed
+                enqueue(QueuedWrite(MugProtocol.requestVersion, "Read version"))
+                handler.postDelayed({
+                    if (isCurrent(g)) enqueue(QueuedWrite(MugProtocol.requestStatus, "Read status"))
+                }, 750)
+                armPhaseTimeout("Mug did not return initial status", 12_000)
+            }, 750)
         } }
 
         override fun onCharacteristicWrite(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) { handler.post {
@@ -542,6 +548,7 @@ class MugBleClient(
     private fun closeStale(candidate: BluetoothGatt) = candidate.close()
 
     private fun log(message: String) {
+        Log.d("AMUG-BLE", message)
         val events = (state.events + BleEvent(System.currentTimeMillis(), message)).takeLast(120)
         update(state.copy(events = events))
     }
