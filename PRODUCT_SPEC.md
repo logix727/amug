@@ -151,6 +151,29 @@ a separate controlled preparation and cooling process.
 - **Technical:** firmware/hardware, UUIDs, status flags, physical validation,
   roadmap, and bounded raw BLE event console.
 
+## On-device intelligence
+
+AMUG uses explainable local statistical models, not cloud AI branding:
+
+- one-minute/material-change temperature sampling
+- robust median pairwise-slope estimation resistant to isolated sensor noise
+- warming/cooling/steady classification
+- ETA ranges only when samples are recent, target is stable, mug is non-empty,
+  hold is enabled, and temperature is consistently moving toward target
+- low/medium/high confidence gating rather than fabricated precision
+
+Future learned suggestions require enough per-mug history and never apply a
+temperature or enable hold automatically. TensorFlow Lite is intentionally not
+included until a labeled problem exists that robust statistics cannot solve.
+
+## Material 3 Expressive decision
+
+The complete public Expressive component API is currently on Material 3
+`1.5.0-alpha`, which requires moving to the Android 17 compile/toolchain line.
+AMUG targets Android 16 and keeps the validated BLE build on stable Material 3
+1.4 for now. It uses expressive hierarchy, shapes, motion, dynamic color, and
+adaptive navigation without destabilizing hardware control for alpha-only APIs.
+
 ## Sources
 
 - Ember Mug 2: https://ember.com/products/ember-mug-2

@@ -107,6 +107,16 @@ features, open checks, and recent raw BLE events.
 - Dynamic Material You colors, semantic surfaces, standard list/card/segmented
   components, 48dp targets, and non-color-only selected/warning states
 
+## Alpha 5 product polish and intelligence
+
+- Four primary destinations: Home, Drinks, Lighting, Settings
+- Technical moved under Settings with full-screen back navigation
+- Centered status/hold Home composition with reduced card density
+- Coffee/Tea/Other tabs and compact selectable preset rows
+- FilterChip music effects and flattened grouped Settings
+- Explainable on-device thermal trend and ETA model with confidence/staleness
+  gates and no cloud dependency
+
 ## Revision 1 — Hardware-safe controls
 
 Goal: validate each daily-use control against the real S6 Plus without unsafe

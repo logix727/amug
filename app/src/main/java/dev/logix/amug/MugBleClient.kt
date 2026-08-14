@@ -46,6 +46,7 @@ data class BleState(
     val commandMessage: String? = null,
     val lastUpdatedAt: Long? = null,
     val sleepTimerEndsAt: Long? = null,
+    val telemetry: List<TelemetryPoint> = emptyList(),
     val events: List<BleEvent> = emptyList(),
     val error: String? = null,
 )
@@ -86,6 +87,7 @@ class MugBleClient(
     private var ambientLedEnabled = false
     private var temperatureLedPalette = MugProtocol.defaultLedPalette
     private var lastTemperatureColor: Int? = null
+    private var polling: Runnable? = null
     private val found = linkedMapOf<String, MugDevice>()
 
     private val scanCallback = object : ScanCallback() {
@@ -416,7 +418,9 @@ class MugBleClient(
         cancelPhaseTimeout()
         val now = System.currentTimeMillis()
         reconnectAttempts = 0
-        update(state.copy(status = status, stage = ConnectionStage.READY, lastUpdatedAt = now, error = null))
+        val point = TelemetryPoint(now, status.currentC, status.targetC, status.maintenanceEnabled, status.empty)
+        update(state.copy(status = status, stage = ConnectionStage.READY, lastUpdatedAt = now, telemetry = (state.telemetry + point).takeLast(20), error = null))
+        schedulePoll()
         awaitingVerification?.let { pending ->
             if (pending.verify?.invoke(status) == true) {
                 cancelVerificationTimeout()
@@ -541,6 +545,8 @@ class MugBleClient(
         activeWrite = null
         awaitingVerification = null
         lastTemperatureColor = null
+        polling?.let(handler::removeCallbacks)
+        polling = null
     }
 
     private fun isCurrent(candidate: BluetoothGatt) = candidate === gatt
@@ -551,6 +557,15 @@ class MugBleClient(
         Log.d("AMUG-BLE", message)
         val events = (state.events + BleEvent(System.currentTimeMillis(), message)).takeLast(120)
         update(state.copy(events = events))
+    }
+
+    private fun schedulePoll() {
+        polling?.let(handler::removeCallbacks)
+        polling = Runnable {
+            if (state.stage == ConnectionStage.READY && awaitingVerification == null && activeWrite == null) {
+                enqueue(QueuedWrite(MugProtocol.requestStatus, "Telemetry sample"))
+            }
+        }.also { handler.postDelayed(it, 60_000) }
     }
 
     private fun update(next: BleState) { state = next; onState(next) }

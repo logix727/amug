@@ -183,6 +183,15 @@ Technical destinations. Coffee/tea/other presets include canonical °F/°C
 holding temperatures and descriptions; live temperature remains the first Home
 content; protocol and roadmap details remain visible in Technical.
 
+### v0.2 alpha 5
+
+- Four primary Material destinations; Technical is nested under Settings
+- Tabbed Coffee/Tea/Other preset catalog
+- Centered Home hero and reduced card density
+- Local temperature trend and ETA insights after sufficient stable telemetry
+- No cloud AI, analytics, or ML runtime; estimates are explainable and hidden
+  when freshness/confidence/safety gates fail
+
 ## Status
 
 - [x] BLE protocol extracted and documented

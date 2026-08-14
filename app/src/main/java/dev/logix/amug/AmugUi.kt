@@ -26,8 +26,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.BluetoothSearching
 import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Coffee
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Info
@@ -42,6 +44,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,6 +57,7 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -61,6 +65,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -95,7 +100,6 @@ private enum class Destination(val label: String, val icon: ImageVector) {
     DRINKS("Drinks", Icons.Rounded.Coffee),
     LIGHTING("Lighting", Icons.Rounded.Palette),
     SETTINGS("Settings", Icons.Rounded.Settings),
-    TECHNICAL("Technical", Icons.Rounded.Info),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -171,6 +175,7 @@ private fun ConnectedScreen(
     manageMugs: () -> Unit,
 ) {
     var destination by remember { mutableStateOf(Destination.HOME) }
+    var showTechnical by remember { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 700.dp
         Scaffold(
@@ -178,9 +183,12 @@ private fun ConnectedScreen(
                 TopAppBar(
                     title = {
                         Column {
-                            Text(destination.label, fontWeight = FontWeight.Bold)
-                            Text(state.connectedName ?: "Connected mug", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if (showTechnical) "Technical" else if (destination == Destination.HOME) state.connectedName ?: "AMUG" else destination.label, fontWeight = FontWeight.Bold)
+                            if (!showTechnical && destination == Destination.HOME) Text(connectionLabel(state.stage), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                    },
+                    navigationIcon = {
+                        if (showTechnical) IconButton(onClick = { showTechnical = false }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
                     },
                     actions = {
                         IconButton(onClick = refresh) { Icon(Icons.Rounded.Refresh, "Refresh mug status") }
@@ -188,7 +196,7 @@ private fun ConnectedScreen(
                 )
             },
             bottomBar = {
-                if (!wide) NavigationBar {
+                if (!wide && !showTechnical) NavigationBar {
                     Destination.entries.forEach { item ->
                         NavigationBarItem(
                             selected = destination == item,
@@ -201,7 +209,7 @@ private fun ConnectedScreen(
             },
         ) { padding ->
             Row(Modifier.fillMaxSize().padding(padding)) {
-                if (wide) NavigationRail(Modifier.fillMaxHeight()) {
+                if (wide && !showTechnical) NavigationRail(Modifier.fillMaxHeight()) {
                     Spacer(Modifier.height(12.dp))
                     Destination.entries.forEach { item ->
                         NavigationRailItem(
@@ -213,17 +221,23 @@ private fun ConnectedScreen(
                     }
                 }
                 Box(Modifier.weight(1f).fillMaxHeight()) {
-                    when (destination) {
+                    if (showTechnical) TechnicalDestination(state) else when (destination) {
                         Destination.HOME -> HomeDestination(state, preferences.unit, setTemperature, setHeating, setGear)
                         Destination.DRINKS -> DrinksDestination(state, preferences.unit, presets, setTemperature)
                         Destination.LIGHTING -> LightingDestination(state, preferences, setTemperatureLed, setLedColor, resetLedPalette, setMusicMode, setHoldLight, setChargeLight)
-                        Destination.SETTINGS -> SettingsDestination(state, preferences.unit, setUnit, setSafetyWait, setSleepTimer, manageMugs)
-                        Destination.TECHNICAL -> TechnicalDestination(state)
+                        Destination.SETTINGS -> SettingsDestination(state, preferences.unit, setUnit, setSafetyWait, manageMugs) { showTechnical = true }
                     }
                 }
             }
         }
     }
+}
+
+private fun connectionLabel(stage: ConnectionStage) = when (stage) {
+    ConnectionStage.READY -> "Connected"
+    ConnectionStage.RECONNECTING -> "Reconnecting"
+    ConnectionStage.INITIALIZING -> "Reading mug"
+    else -> stage.name.lowercase().replaceFirstChar(Char::uppercaseChar)
 }
 
 @Composable
@@ -245,6 +259,7 @@ private fun HomeDestination(
     setGear: (Int) -> Unit,
 ) {
     val status = state.status
+    val insight = remember(state.telemetry) { ThermalIntelligence.analyze(state.telemetry) }
     var target by remember(status?.targetC, unit) { mutableDoubleStateOf(unit.display(status?.targetC ?: 57.0)) }
     var showTemperatureEntry by remember { mutableStateOf(false) }
     DestinationList {
@@ -253,27 +268,47 @@ private fun HomeDestination(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                 shape = RoundedCornerShape(28.dp),
             ) {
-                Column(Modifier.padding(24.dp)) {
-                    Text("CURRENT TEMPERATURE", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text(status?.let { "${unit.display(it.currentC).roundToInt()}°" } ?: "--°", fontSize = 72.sp, lineHeight = 80.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Current temperature", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text(status?.let { "${unit.display(it.currentC).roundToInt()}°" } ?: "--°", style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                     val delta = status?.let { unit.display(it.currentC) - unit.display(it.targetC) }
                     Text(
                         status?.let { "Target ${unit.display(it.targetC).roundToInt()}${unit.symbol} · ${formatDelta(delta!!, unit)}" } ?: "Waiting for live status",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
-                    Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.LocalFireDepartment, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                         Text(if (status?.maintenanceEnabled == true) "  Hold on" else "  Hold off", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.weight(1f))
                         if (status?.charging == true) Icon(Icons.Rounded.BatteryChargingFull, "Charging", tint = MaterialTheme.colorScheme.onPrimaryContainer)
                         Text(status?.batteryPercent?.let { " $it%" } ?: "Battery --", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
                     }
+                    HorizontalDivider(Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .25f))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Temperature hold", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
+                            Text("Maintain ${status?.let { unit.display(it.targetC).roundToInt() } ?: "--"}${unit.symbol}", color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .75f))
+                        }
+                        Switch(checked = status?.maintenanceEnabled == true, enabled = status != null && !status.empty && !status.nightLightEnabled, onCheckedChange = setHeating, modifier = Modifier.semantics { contentDescription = "Temperature hold" })
+                    }
                 }
             }
         }
         if (status?.empty == true) item { WarningCard("Mug empty", "Temperature hold stopped. Add liquid before turning hold on.") }
         if (status?.nightLightEnabled == true) item { WarningCard("Lighting is active", "Ambient lighting and temperature hold cannot run together.") }
+        insight?.let { smart ->
+            item {
+                Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(20.dp)) {
+                    ListItem(
+                        headlineContent = { Text(smart.explanation, fontWeight = FontWeight.Bold) },
+                        supportingContent = { Text("${smart.trend} · ${smart.confidence.name.lowercase().replaceFirstChar(Char::uppercaseChar)} confidence · calculated on this device") },
+                        leadingContent = { Icon(Icons.Rounded.Info, null) },
+                        colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
+            }
+        }
         if ((unit == TemperatureUnit.FAHRENHEIT && target >= 140) || (unit == TemperatureUnit.CELSIUS && target >= 60)) {
             item { WarningCard("Very hot", "Sip carefully and keep the mug away from children.") }
         }
@@ -326,24 +361,6 @@ private fun HomeDestination(
                         modifier = Modifier.padding(top = 12.dp),
                     )
                 }
-            }
-        }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(24.dp)) {
-                ListItem(
-                    headlineContent = { Text("Temperature hold", fontWeight = FontWeight.Bold) },
-                    supportingContent = { Text(if (status?.empty == true) "Unavailable while the mug is empty" else "Maintain the selected drinking temperature") },
-                    leadingContent = { Icon(Icons.Rounded.LocalFireDepartment, null) },
-                    trailingContent = {
-                        Switch(
-                            checked = status?.maintenanceEnabled == true,
-                            enabled = status != null && !status.empty && !status.nightLightEnabled,
-                            onCheckedChange = setHeating,
-                            modifier = Modifier.semantics { contentDescription = "Temperature hold" },
-                        )
-                    },
-                    colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-                )
             }
         }
     }
@@ -399,19 +416,22 @@ private val approvedFahrenheit = mapOf(
 
 @Composable
 private fun DrinksDestination(state: BleState, unit: TemperatureUnit, presets: List<PresetEntity>, setTemperature: (Double) -> Unit) {
+    var selectedCategory by remember { mutableStateOf("Coffee") }
     DestinationList {
         item {
             Text("Choose a holding temperature", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Text("These are comfortable holding and drinking temperatures, not brewing temperatures.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        drinkCategories.forEach { (category, names) ->
-            item { Text(category, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
-            names.forEach { name ->
-                val preset = presets.firstOrNull { it.name == name }
-                if (preset != null) item(key = preset.id) {
-                    DrinkPresetCard(preset, state.status?.targetC, unit, setTemperature)
+        item {
+            PrimaryTabRow(selectedTabIndex = drinkCategories.keys.indexOf(selectedCategory)) {
+                drinkCategories.keys.forEach { category ->
+                    Tab(selected = selectedCategory == category, onClick = { selectedCategory = category }, text = { Text(category) })
                 }
             }
+        }
+        drinkCategories.getValue(selectedCategory).forEach { name ->
+            val preset = presets.firstOrNull { it.name == name }
+            if (preset != null) item(key = preset.id) { DrinkPresetCard(preset, state.status?.targetC, unit, setTemperature) }
         }
     }
 }
@@ -421,24 +441,20 @@ private fun DrinkPresetCard(preset: PresetEntity, currentTargetC: Double?, unit:
     val celsius = preset.temperatureCentiC / 100.0
     val fahrenheit = approvedFahrenheit[preset.name] ?: (celsius * 9 / 5 + 32).roundToInt()
     val selected = currentTargetC != null && abs(currentTargetC - celsius) < .05
-    OutlinedCard(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(18.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                Column(Modifier.weight(1f)) {
-                    Text(preset.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        if (unit == TemperatureUnit.FAHRENHEIT) "$fahrenheit°F · ${celsius.roundToInt()}°C" else "${celsius.roundToInt()}°C · $fahrenheit°F",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                    )
+    Surface(shape = RoundedCornerShape(20.dp), color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer) {
+        ListItem(
+            headlineContent = { Text(preset.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) },
+            supportingContent = {
+                Column {
+                    Text(if (unit == TemperatureUnit.FAHRENHEIT) "$fahrenheit°F · ${celsius.roundToInt()}°C" else "${celsius.roundToInt()}°C · $fahrenheit°F", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Text(drinkDescriptions[preset.name].orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (selected) Text("Matches current target", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
-                if (selected) Text("Current target", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            }
-            Text(drinkDescriptions[preset.name].orEmpty(), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 10.dp))
-            FilledTonalButton(onClick = { setTemperature(celsius) }, modifier = Modifier.align(Alignment.End).height(48.dp), enabled = !selected) {
-                Text(if (selected) "Applied" else "Apply")
-            }
-        }
+            },
+            leadingContent = { Surface(shape = CircleShape, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.size(48.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Coffee, null, tint = MaterialTheme.colorScheme.onTertiaryContainer) } } },
+            trailingContent = { FilledTonalButton(onClick = { setTemperature(celsius) }, enabled = !selected, modifier = Modifier.height(48.dp)) { if (selected) Icon(Icons.Rounded.Check, "Matches target") else Text("Apply") } },
+            colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
+        )
     }
 }
 
@@ -504,14 +520,14 @@ private fun LightingDestination(
                 Column(Modifier.padding(20.dp)) {
                     Text("Music effects", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text("Available while temperature hold is on", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    (0..5).chunked(2).forEach { row ->
+                    (0..5).chunked(3).forEach { row ->
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             row.forEach { mode ->
-                                OutlinedButton(onClick = { setMusicMode(mode) }, modifier = Modifier.weight(1f).height(48.dp), enabled = status?.maintenanceEnabled == true) { Text("Effect ${mode + 1}") }
+                                FilterChip(selected = status?.lightMode == mode, onClick = { setMusicMode(mode) }, label = { Text("${mode + 1}") }, modifier = Modifier.weight(1f).height(48.dp), enabled = status?.maintenanceEnabled == true, leadingIcon = if (status?.lightMode == mode) {{ Icon(Icons.Rounded.Check, null) }} else null)
                             }
                         }
                     }
-                    TextButton(onClick = { setMusicMode(null) }, enabled = status != null, modifier = Modifier.height(48.dp)) { Text("Turn music lighting off") }
+                    FilterChip(selected = status?.lightMode in listOf(0x06, 0x15, 0x16), onClick = { setMusicMode(null) }, label = { Text("Off") }, enabled = status != null, modifier = Modifier.height(48.dp))
                 }
             }
         }
@@ -557,12 +573,14 @@ private fun SettingsDestination(
     unit: TemperatureUnit,
     setUnit: (TemperatureUnit) -> Unit,
     setSafetyWait: (Int) -> Unit,
-    setSleepTimer: (Int?) -> Unit,
     manageMugs: () -> Unit,
+    openTechnical: () -> Unit,
 ) {
     DestinationList {
+        item { Text("Display", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) }
         item {
-            SettingsCard("Temperature units", "Used throughout AMUG") {
+            Column {
+                ListItem(headlineContent = { Text("Temperature units") }, supportingContent = { Text("Used throughout AMUG") }, colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent))
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 14.dp)) {
                     TemperatureUnit.entries.forEachIndexed { index, option ->
                         SegmentedButton(
@@ -576,8 +594,11 @@ private fun SettingsDestination(
                 }
             }
         }
+        item { HorizontalDivider() }
+        item { Text("Safety", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) }
         if (state.profile == MugProfile.S6_PLUS) item {
-            SettingsCard("Firmware auto-off", "Stored by mug firmware · experimental; physical validation pending") {
+            Column {
+                ListItem(headlineContent = { Text("Firmware auto-off") }, supportingContent = { Text("Stored by mug firmware · physically validated") }, colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent))
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(2, 4).forEach { hours ->
                         val selected = state.status?.safetyWaitHours == hours
@@ -587,29 +608,22 @@ private fun SettingsDestination(
                 }
             }
         }
+        item { HorizontalDivider() }
+        item { Text("Device & data", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) }
         item {
-            SettingsCard("Phone sleep timer", "AMUG must remain connected to turn hold off") {
-                state.sleepTimerEndsAt?.let { end ->
-                    val minutes = ((end - System.currentTimeMillis()).coerceAtLeast(0) / 60_000) + 1
-                    Text("About $minutes minutes remaining", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-                }
-                Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(15, 30, 60).forEach { minutes ->
-                        OutlinedButton(onClick = { setSleepTimer(minutes) }, modifier = Modifier.weight(1f).height(48.dp), enabled = state.status != null) { Text("$minutes min") }
-                    }
-                }
-                TextButton(onClick = { setSleepTimer(null) }, enabled = state.sleepTimerEndsAt != null, modifier = Modifier.height(48.dp)) { Text("Cancel timer") }
-            }
-        }
-        item {
-            Card(onClick = manageMugs, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(24.dp)) {
+            Surface(onClick = manageMugs, color = Color.Transparent) {
                 ListItem(
                     headlineContent = { Text("Mug manager", fontWeight = FontWeight.Bold) },
                     supportingContent = { Text("Rename, select, or forget mugs and manage local history") },
                     leadingContent = { Icon(Icons.Rounded.Devices, null) },
                     trailingContent = { Text("Open", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
-                    colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                    colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
                 )
+            }
+        }
+        item {
+            Surface(onClick = openTechnical, color = Color.Transparent) {
+                ListItem(headlineContent = { Text("Technical & diagnostics", fontWeight = FontWeight.Bold) }, supportingContent = { Text("Protocol, firmware, validation and BLE event log") }, leadingContent = { Icon(Icons.Rounded.Info, null) }, trailingContent = { Text("Open", color = MaterialTheme.colorScheme.primary) }, colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent))
             }
         }
     }
