@@ -5,6 +5,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.AlarmManager
 import android.app.Service
 import android.content.ComponentName
 import android.content.Intent
@@ -27,6 +28,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -94,6 +96,7 @@ class MugConnectionService : Service() {
     private var activeSessionMugId: Long? = null
     private var lastSample: SessionSampleEntity? = null
     private var repositoryReady = false
+    private var timerExpiryPending = false
 
     override fun onCreate() {
         super.onCreate()
@@ -106,6 +109,7 @@ class MugConnectionService : Service() {
             repository.closeAbandonedSessions()
             repository.pruneHistory()
             repositoryReady = true
+            restoreSleepTimer()
         }
         scope.launch { repository.globalPreferences.collect { alertPreferences = it } }
     }
@@ -118,14 +122,19 @@ class MugConnectionService : Service() {
                 if (ensureForeground()) scope.launch { if (!connectLastAsync()) stopIdleForeground() }
             }
             ACTION_DISCONNECT -> client.disconnect()
+            ACTION_TIMER_EXPIRED -> {
+                timerExpiryPending = true
+                if (ensureForeground()) scope.launch { connectLastAsync() }
+            }
+            null -> if (ensureForeground()) scope.launch { connectLastAsync() }
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     override fun onDestroy() {
         LiveMugConnection.mugId = null
         TileService.requestListeningState(this, ComponentName(this, MugTileService::class.java))
-        scope.launch(Dispatchers.IO) { finishSession("service stopped"); MugWidget().updateAll(this@MugConnectionService) }
+        kotlinx.coroutines.runBlocking(Dispatchers.IO) { finishSession("service stopped"); MugWidget().updateAll(this@MugConnectionService) }
         client.shutdown()
         scope.cancel()
         super.onDestroy()
@@ -191,6 +200,12 @@ class MugConnectionService : Service() {
             getSystemService<NotificationManager>()?.notify(NOTIFICATION_ID, buildNotification(published))
         }
         publishAlerts(published)
+        if (timerExpiryPending && published.stage == ConnectionStage.READY) {
+            timerExpiryPending = false
+            client.safetyStop()
+            setSleepTimer(null)
+            alert(ALERT_TIMER, "Sleep timer finished", "AMUG requested temperature hold off")
+        }
 
         val snapshotKey = listOf(state.stage, state.connectedName, state.status?.currentC, state.status?.targetC, state.lastUpdatedAt)
         if (snapshotKey != lastSnapshotKey) {
@@ -212,6 +227,7 @@ class MugConnectionService : Service() {
         val mugId = repository.upsertMug(device)
         persistenceMutex.withLock {
             if (activeMugId != null && activeMugId != mugId) {
+                setSleepTimer(null)
                 client.disconnect()
                 finishSession("switched mug")
                 LiveMugConnection.mugId = null
@@ -320,15 +336,45 @@ class MugConnectionService : Service() {
         sleepTimerJob = null
         sleepTimerEndsAt = minutes?.let { System.currentTimeMillis() + it * 60_000L }
         mutableState.value = mutableState.value.copy(sleepTimerEndsAt = sleepTimerEndsAt)
+        scope.launch(Dispatchers.IO) { repository.setSleepTimer(sleepTimerEndsAt, activeMugId) }
+        scheduleTimerAlarm(sleepTimerEndsAt)
         if (minutes != null) {
             sleepTimerJob = scope.launch {
                 delay(minutes * 60_000L)
-                client.setMaintenanceEnabled(false)
+                client.safetyStop()
                 sleepTimerEndsAt = null
+                repository.setSleepTimer(null, null)
                 mutableState.value = mutableState.value.copy(sleepTimerEndsAt = null)
                 alert(ALERT_TIMER, "Sleep timer finished", "AMUG requested temperature hold off")
             }
         }
+    }
+
+    private suspend fun restoreSleepTimer() {
+        val preferences = repository.globalPreferences.first()
+        val deadline = preferences.sleepTimerDeadline ?: return
+        val selected = repository.selectedMugNow()?.id
+        if (selected == null || selected != preferences.sleepTimerMugId) { repository.setSleepTimer(null, null); return }
+        val remaining = deadline - System.currentTimeMillis()
+        if (remaining <= 0) { timerExpiryPending = true; connectLastAsync(); return }
+        sleepTimerEndsAt = deadline
+        mutableState.value = mutableState.value.copy(sleepTimerEndsAt = deadline)
+        scheduleTimerAlarm(deadline)
+        sleepTimerJob = scope.launch {
+            delay(remaining)
+            client.safetyStop()
+            sleepTimerEndsAt = null
+            repository.setSleepTimer(null, null)
+            mutableState.value = mutableState.value.copy(sleepTimerEndsAt = null)
+            alert(ALERT_TIMER, "Sleep timer finished", "AMUG requested temperature hold off")
+        }
+    }
+
+    private fun scheduleTimerAlarm(deadline: Long?) {
+        val alarm = getSystemService(AlarmManager::class.java)
+        val pending = PendingIntent.getBroadcast(this, 2001, Intent(this, MugTimerReceiver::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        alarm.cancel(pending)
+        if (deadline != null) alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, deadline, pending)
     }
 
     private fun publishAlerts(state: BleState) {
@@ -370,6 +416,7 @@ class MugConnectionService : Service() {
     companion object {
         const val ACTION_CONNECT_LAST = "dev.logix.amug.action.CONNECT_LAST"
         const val ACTION_DISCONNECT = "dev.logix.amug.action.DISCONNECT"
+        const val ACTION_TIMER_EXPIRED = "dev.logix.amug.action.TIMER_EXPIRED"
         private const val CHANNEL_ID = "mug_connection"
         private const val ALERT_CHANNEL_ID = "mug_alerts"
         private const val NOTIFICATION_ID = 1001

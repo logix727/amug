@@ -134,6 +134,8 @@ interface PresetDao {
     @Query("SELECT * FROM presets WHERE mugId = :mugId ORDER BY temperatureCentiC, name") fun observe(mugId: Long): Flow<List<PresetEntity>>
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAll(presets: List<PresetEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(preset: PresetEntity): Long
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insert(preset: PresetEntity): Long
+    @Query("SELECT * FROM presets WHERE mugId = :mugId AND lower(name) = lower(:name) LIMIT 1") suspend fun byName(mugId: Long, name: String): PresetEntity?
     @Query("DELETE FROM presets WHERE id = :id AND approved = 0") suspend fun delete(id: Long)
 }
 

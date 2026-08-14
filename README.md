@@ -6,6 +6,10 @@ app (`com.jimiyoupin.vsitoo`, "VSITOO" on Google Play / App Store) is a DCloud
 uni-app whose entire device logic is in minified JavaScript assets, which makes
 protocol extraction straightforward.
 
+Stable release documents: [release notes](RELEASE_NOTES_0.3.0.md),
+[privacy](PRIVACY.md), [support](SUPPORT.md), [security](SECURITY.md), and
+[signing identity](SIGNING.md).
+
 ## Device info (S6 Plus)
 
 - 12 oz (355 ml) self-heating coffee mug, 316 stainless steel, IPX7
@@ -216,7 +220,10 @@ lighting matrix. See [RC1_VALIDATION.md](RC1_VALIDATION.md).
 
 Timer behavior: the S6 Plus firmware exposes verified 2-hour and 4-hour
 failsafes. AMUG separately provides a phone-supervised 5–120 minute timer in
-5-minute increments for shorter sessions.
+5-minute increments for shorter sessions. AMUG restores timers after process
+death and reschedules them after reboot; because reboot drops BLE, an overdue
+timer raises a safety notification and is enforced when AMUG reconnects. The
+firmware failsafe is the only shutdown guarantee independent of the phone.
 
 ## Status
 

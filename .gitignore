@@ -24,6 +24,9 @@ local.properties
 *.log
 __pycache__/
 *.py[cod]
+*.jks
+*.keystore
+keystore.properties
 
 # Scraping helper scripts (keep in git history if desired, but not needed)
 try_download.py

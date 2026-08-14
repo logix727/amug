@@ -47,6 +47,8 @@ data class BleState(
     val version: MugVersion? = null,
     val commandState: CommandState = CommandState.IDLE,
     val commandMessage: String? = null,
+    val confirmedTargetC: Double? = null,
+    val confirmationSequence: Long = 0,
     val lastUpdatedAt: Long? = null,
     val sleepTimerEndsAt: Long? = null,
     val telemetry: List<TelemetryPoint> = emptyList(),
@@ -93,6 +95,7 @@ class MugBleClient(
     private var polling: Runnable? = null
     private var previousEmpty = false
     private var emptyShutdownPending = false
+    private var cancelActiveForSafety = false
     private val found = linkedMapOf<String, MugDevice>()
     private val adapterReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -201,6 +204,12 @@ class MugBleClient(
             cancelWriteTimeout()
             val completed = activeWrite ?: return@post
             activeWrite = null
+            if (cancelActiveForSafety) {
+                cancelActiveForSafety = false
+                log("Discarded in-flight command for safety stop: ${completed.label}")
+                drainWrites()
+                return@post
+            }
             if (status != BluetoothGatt.GATT_SUCCESS) return@post retryOrFail(completed, "GATT write failed ($status)")
             log("TX ✓ ${completed.label}")
             if (completed.verify != null) {
@@ -278,6 +287,7 @@ class MugBleClient(
         writes.clear()
         awaitingVerification = null
         cancelVerificationTimeout()
+        if (activeWrite != null) cancelActiveForSafety = true
         enqueueFirst(QueuedWrite(MugProtocol.safetyOff(currentProfile), "Manual safety stop", verify = { !it.maintenanceEnabled }))
     }
 
@@ -464,6 +474,7 @@ class MugBleClient(
             writes.clear()
             awaitingVerification = null
             cancelVerificationTimeout()
+            if (activeWrite != null) cancelActiveForSafety = true
             val currentProfile = profile
             if (currentProfile != null) enqueueFirst(QueuedWrite(MugProtocol.safetyOff(currentProfile), "Safety stop: mug empty", verify = { !it.maintenanceEnabled }))
         }
@@ -474,7 +485,9 @@ class MugBleClient(
             if (pending.verify?.invoke(status) == true) {
                 cancelVerificationTimeout()
                 awaitingVerification = null
-                update(state.copy(commandState = CommandState.CONFIRMED, commandMessage = "${pending.label} confirmed"))
+                val confirmedTarget = pending.value.takeIf { it.firstOrNull()?.toInt()?.and(0xff) == 0x04 && it.size >= 3 }
+                    ?.let { (it[1].toInt() and 0xff) + (it[2].toInt() and 0xff) / 100.0 }
+                update(state.copy(commandState = CommandState.CONFIRMED, commandMessage = "${pending.label} confirmed", confirmedTargetC = confirmedTarget, confirmationSequence = state.confirmationSequence + 1))
                 log("Confirmed ${pending.label}")
                 drainWrites()
             }
@@ -564,6 +577,11 @@ class MugBleClient(
         cancelWriteTimeout()
         writeTimeout = Runnable {
             if (activeWrite === write) activeWrite = null
+            if (cancelActiveForSafety) {
+                cancelActiveForSafety = false
+                drainWrites()
+                return@Runnable
+            }
             retryOrFail(write, "Write timed out")
         }.also { handler.postDelayed(it, 2_000) }
     }
@@ -595,6 +613,7 @@ class MugBleClient(
         awaitingVerification = null
         lastTemperatureColor = null
         emptyShutdownPending = false
+        previousEmpty = false
         polling?.let(handler::removeCallbacks)
         polling = null
     }

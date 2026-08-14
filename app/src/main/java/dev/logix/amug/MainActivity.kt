@@ -3,8 +3,6 @@ package dev.logix.amug
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -78,7 +76,6 @@ class MainActivity : ComponentActivity() {
                     disconnect = viewModel::disconnect,
                     clearEvents = viewModel::clearEvents,
                     exportDiagnostics = { text ->
-                        getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("AMUG diagnostics", text))
                         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share AMUG diagnostics"))
                     },
                     selectMug = viewModel::selectMug,

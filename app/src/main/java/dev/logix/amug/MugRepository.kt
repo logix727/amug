@@ -31,6 +31,8 @@ data class GlobalPreferences(
     val lowBatteryAlert: Boolean = false,
     val disconnectAlert: Boolean = false,
     val hotAlert: Boolean = false,
+    val sleepTimerDeadline: Long? = null,
+    val sleepTimerMugId: Long? = null,
 )
 
 enum class AlertKind { READY, EMPTY, LOW_BATTERY, DISCONNECT, HOT }
@@ -49,6 +51,8 @@ class MugRepository(private val context: Context) {
             lowBatteryAlert = values[ALERT_LOW_BATTERY] ?: false,
             disconnectAlert = values[ALERT_DISCONNECT] ?: false,
             hotAlert = values[ALERT_HOT] ?: false,
+            sleepTimerDeadline = values[SLEEP_TIMER_DEADLINE]?.takeIf { it > 0 },
+            sleepTimerMugId = values[SLEEP_TIMER_MUG_ID]?.takeIf { it > 0 },
         )
     }
     val mugs: Flow<List<MugEntity>> = db.mugs().observeAll()
@@ -100,7 +104,7 @@ class MugRepository(private val context: Context) {
             existing.id
         }
         db.mugPreferences().upsert(db.mugPreferences().get(id) ?: MugPreferencesEntity(id, ledPalette = encodePalette(MugProtocol.defaultLedPalette)))
-        db.presets().insertAll(APPROVED_PRESETS.map { (name, centiC) -> PresetEntity(mugId = id, name = name, temperatureCentiC = centiC, approved = true) })
+        repairApprovedPresets(id)
         id
         }
         if (select) store.edit { it[SELECTED_MUG_ID] = id }
@@ -116,12 +120,20 @@ class MugRepository(private val context: Context) {
     suspend fun setUnit(unit: TemperatureUnit) = store.edit { it[UNIT] = unit.name }
     suspend fun setHistoryRetention(days: Int) = store.edit { it[RETENTION_DAYS] = days.coerceIn(1, 3650) }
     suspend fun setAlert(kind: AlertKind, enabled: Boolean) = store.edit { it[alertKey(kind)] = enabled }
+    suspend fun setSleepTimer(deadline: Long?, mugId: Long?) = store.edit { values ->
+        if (deadline == null || mugId == null) { values.remove(SLEEP_TIMER_DEADLINE); values.remove(SLEEP_TIMER_MUG_ID) }
+        else { values[SLEEP_TIMER_DEADLINE] = deadline; values[SLEEP_TIMER_MUG_ID] = mugId }
+    }
     suspend fun mugPreferences(mugId: Long) = db.mugPreferences().get(mugId) ?: MugPreferencesEntity(mugId, ledPalette = encodePalette(MugProtocol.defaultLedPalette))
     suspend fun saveMugPreferences(preferences: MugPreferencesEntity) = db.mugPreferences().upsert(preferences)
     fun presets(mugId: Long) = db.presets().observe(mugId)
     suspend fun savePreset(preset: PresetEntity) = db.presets().upsert(preset.copy(temperatureCentiC = preset.temperatureCentiC.coerceIn(4800, 6600)))
     suspend fun deletePreset(id: Long) = db.presets().delete(id)
-    suspend fun savePersonalPreset(mugId: Long, name: String, centiC: Int) = db.presets().upsert(PresetEntity(mugId = mugId, name = name, temperatureCentiC = centiC.coerceIn(4800, 6600), approved = false))
+    suspend fun savePersonalPreset(mugId: Long, name: String, centiC: Int): Boolean {
+        val clean = name.trim()
+        if (clean.isEmpty() || APPROVED_PRESETS.any { it.first.equals(clean, true) } || db.presets().byName(mugId, clean) != null) return false
+        return db.presets().insert(PresetEntity(mugId = mugId, name = clean, temperatureCentiC = centiC.coerceIn(4800, 6600), approved = false)) > 0
+    }
     suspend fun recordTargetChoice(mugId: Long, centiC: Int, source: String, presetName: String?, chosenAt: Long = System.currentTimeMillis()) {
         val hour = java.time.Instant.ofEpochMilli(chosenAt).atZone(java.time.ZoneId.systemDefault()).hour
         db.targetChoices().insert(TargetChoiceEntity(mugId = mugId, targetCentiC = centiC.coerceIn(4800, 6600), source = source, presetName = presetName, chosenAt = chosenAt, localHour = hour))
@@ -154,6 +166,8 @@ class MugRepository(private val context: Context) {
         private val ALERT_LOW_BATTERY = booleanPreferencesKey("alert_low_battery")
         private val ALERT_DISCONNECT = booleanPreferencesKey("alert_disconnect")
         private val ALERT_HOT = booleanPreferencesKey("alert_hot")
+        private val SLEEP_TIMER_DEADLINE = longPreferencesKey("sleep_timer_deadline")
+        private val SLEEP_TIMER_MUG_ID = longPreferencesKey("sleep_timer_mug_id")
         private val migrationMutex = Mutex()
         val APPROVED_PRESETS = listOf(
             "Green tea" to 5200, "White tea" to 5200,
@@ -174,6 +188,14 @@ class MugRepository(private val context: Context) {
             AlertKind.LOW_BATTERY -> ALERT_LOW_BATTERY
             AlertKind.DISCONNECT -> ALERT_DISCONNECT
             AlertKind.HOT -> ALERT_HOT
+        }
+    }
+
+    private suspend fun repairApprovedPresets(mugId: Long) {
+        APPROVED_PRESETS.forEach { (name, centiC) ->
+            val existing = db.presets().byName(mugId, name)
+            if (existing != null && !existing.approved) db.presets().delete(existing.id)
+            if (existing == null || !existing.approved) db.presets().insert(PresetEntity(mugId = mugId, name = name, temperatureCentiC = centiC, approved = true))
         }
     }
 }

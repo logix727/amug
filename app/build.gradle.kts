@@ -16,8 +16,8 @@ android {
         applicationId = "dev.logix.amug"
         minSdk = 31
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.3.0-rc2"
+        versionCode = 11
+        versionName = "0.3.0"
     }
 
     buildFeatures {
@@ -28,6 +28,25 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    val releaseKeystore = providers.environmentVariable("AMUG_KEYSTORE").orNull
+    signingConfigs {
+        if (releaseKeystore != null) create("release") {
+            storeFile = file(releaseKeystore)
+            storePassword = providers.environmentVariable("AMUG_STORE_PASSWORD").orNull
+            keyAlias = providers.environmentVariable("AMUG_KEY_ALIAS").orNull
+            keyPassword = providers.environmentVariable("AMUG_KEY_PASSWORD").orNull
+        }
+    }
+    buildTypes {
+        release {
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
+        }
     }
 }
 

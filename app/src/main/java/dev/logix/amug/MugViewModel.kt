@@ -56,6 +56,7 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
     private var stateJob: Job? = null
     private var pendingChoice: PendingChoice? = null
     private var lastCommandState = CommandState.IDLE
+    private var lastConfirmationSequence = 0L
     private val pendingCommands = mutableListOf<(MugConnectionService.LocalBinder) -> Unit>()
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
@@ -65,14 +66,16 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
             stateJob = viewModelScope.launch {
                 connected.state.collect { next ->
                     mutableState.value = next
+                    if (next.confirmationSequence != lastConfirmationSequence) {
+                        val choice = pendingChoice
+                        if (choice != null && next.confirmedTargetC != null && kotlin.math.abs(next.confirmedTargetC - choice.celsius) < .02) {
+                            selectedMug.value?.id?.let { mugId -> viewModelScope.launch { repository.recordTargetChoice(mugId, (choice.celsius * 100).roundToInt(), choice.source, choice.presetName) } }
+                            pendingChoice = null
+                        }
+                        lastConfirmationSequence = next.confirmationSequence
+                    }
                     if (next.commandState != lastCommandState) {
                         when (next.commandState) {
-                            CommandState.CONFIRMED -> pendingChoice?.let { choice ->
-                                selectedMug.value?.id?.let { mugId ->
-                                    viewModelScope.launch { repository.recordTargetChoice(mugId, (choice.celsius * 100).roundToInt(), choice.source, choice.presetName) }
-                                }
-                                pendingChoice = null
-                            }
                             CommandState.FAILED -> pendingChoice = null
                             else -> Unit
                         }
@@ -129,6 +132,7 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
     fun applyPreset(preset: PresetEntity) = setTemperatureChoice(preset.temperatureCentiC / 100.0, "preset", preset.name)
     fun applySuggestion(suggestion: TemperatureSuggestion) = setTemperatureChoice(suggestion.targetCentiC / 100.0, "suggestion", null)
     private fun setTemperatureChoice(celsius: Double, source: String, presetName: String?) {
+        if (mutableState.value.stage != ConnectionStage.READY || mutableState.value.status?.empty != false || mutableState.value.profile != MugProfile.S6_PLUS) return
         pendingChoice = PendingChoice(celsius, source, presetName)
         withService { it.setTemperature(celsius) }
     }

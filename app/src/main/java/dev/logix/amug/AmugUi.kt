@@ -18,6 +18,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -204,6 +208,7 @@ private fun ConnectedScreen(
 ) {
     var destination by remember { mutableStateOf(Destination.HOME) }
     var showTechnical by remember { mutableStateOf(false) }
+    BackHandler(enabled = showTechnical) { showTechnical = false }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 700.dp
         Scaffold(
@@ -530,7 +535,7 @@ private fun PersonalPresetRow(preset: PresetEntity, currentTargetC: Double?, uni
 @Composable
 private fun CustomPresetDialog(unit: TemperatureUnit, dismiss: () -> Unit, save: (String, Double) -> Unit) {
     var name by remember { mutableStateOf("") }; var temperature by remember { mutableStateOf(if (unit == TemperatureUnit.FAHRENHEIT) "135" else "57") }; val value = temperature.toDoubleOrNull(); val celsius = value?.let(unit::toCelsius); val valid = name.trim().isNotEmpty() && celsius != null && celsius in 48.0..66.0
-    Dialog(onDismissRequest = dismiss) { Card { Column(Modifier.padding(24.dp)) { Text("Custom preset", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); OutlinedTextField(name, { name = it.take(30) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)); OutlinedTextField(temperature, { temperature = it.filter { c -> c.isDigit() || c == '.' }.take(5) }, label = { Text("Temperature ${unit.symbol}") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)); Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) { TextButton(onClick = dismiss) { Text("Cancel") }; Button(onClick = { save(name.trim(), celsius!!) }, enabled = valid) { Text("Save") } } } } }
+    Dialog(onDismissRequest = dismiss) { Card { Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()).padding(24.dp)) { Text("Custom preset", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); OutlinedTextField(name, { name = it.take(30) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)); OutlinedTextField(temperature, { temperature = it.filter { c -> c.isDigit() || c == '.' }.take(5) }, label = { Text("Temperature ${unit.symbol}") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)); Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) { TextButton(onClick = dismiss) { Text("Cancel") }; Button(onClick = { save(name.trim(), celsius!!) }, enabled = valid) { Text("Save") } } } } }
 }
 
 @Composable
@@ -910,7 +915,7 @@ private fun MugManagerDialog(
 ) {
     Dialog(onDismissRequest = dismiss) {
         Card(shape = RoundedCornerShape(28.dp)) {
-            LazyColumn(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 640.dp).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item { Text("Mug manager", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
                 if (mugs.isEmpty()) item { Text("No remembered mugs yet", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 items(mugs, key = MugEntity::id) { mug ->
@@ -956,7 +961,7 @@ private fun TemperatureEntryDialog(current: Double, unit: TemperatureUnit, onDis
     val valid = parsed != null && parsed in range
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(28.dp)) {
-            Column(Modifier.padding(24.dp)) {
+            Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()).padding(24.dp)) {
                 Text("Set exact temperature", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text("${range.start.roundToInt()}–${range.endInclusive.roundToInt()}${unit.symbol}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
