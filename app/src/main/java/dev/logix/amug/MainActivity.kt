@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
                 val presets by viewModel.presets.collectAsState()
                 val sessions by viewModel.sessions.collectAsState()
                 val globalPreferences by viewModel.globalPreferences.collectAsState()
+                val suggestion by viewModel.suggestion.collectAsState()
                 AmugApp(
                     state = state,
                     preferences = preferences,
@@ -48,9 +49,14 @@ class MainActivity : ComponentActivity() {
                     presets = presets,
                     sessions = sessions,
                     historyRetentionDays = globalPreferences.historyRetentionDays,
+                    suggestion = suggestion,
                     scan = ::startScan,
                     connect = viewModel::connect,
                     setTemperature = viewModel::setTemperature,
+                    applyPreset = viewModel::applyPreset,
+                    applySuggestion = viewModel::applySuggestion,
+                    saveSuggestion = viewModel::saveSuggestionAsPreset,
+                    resetLearning = viewModel::resetLearning,
                     setHeating = viewModel::setMaintenanceEnabled,
                     setGear = viewModel::setGear,
                     setUnit = viewModel::setUnit,

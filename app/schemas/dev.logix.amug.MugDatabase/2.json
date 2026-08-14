@@ -1,0 +1,502 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "2b4db56b582971f942dd9730dc55772f",
+    "entities": [
+      {
+        "tableName": "mugs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `bleAddress` TEXT NOT NULL, `name` TEXT NOT NULL, `advertisedName` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `lastSeenAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bleAddress",
+            "columnName": "bleAddress",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "advertisedName",
+            "columnName": "advertisedName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSeenAt",
+            "columnName": "lastSeenAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_mugs_bleAddress",
+            "unique": true,
+            "columnNames": [
+              "bleAddress"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_mugs_bleAddress` ON `${TABLE_NAME}` (`bleAddress`)"
+          }
+        ]
+      },
+      {
+        "tableName": "mug_preferences",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`mugId` INTEGER NOT NULL, `ambientTemperatureMode` INTEGER NOT NULL, `ledPalette` TEXT NOT NULL, PRIMARY KEY(`mugId`), FOREIGN KEY(`mugId`) REFERENCES `mugs`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "mugId",
+            "columnName": "mugId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ambientTemperatureMode",
+            "columnName": "ambientTemperatureMode",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ledPalette",
+            "columnName": "ledPalette",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "mugId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "mugs",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "mugId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "presets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `mugId` INTEGER NOT NULL, `name` TEXT NOT NULL, `temperatureCentiC` INTEGER NOT NULL, `approved` INTEGER NOT NULL, FOREIGN KEY(`mugId`) REFERENCES `mugs`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mugId",
+            "columnName": "mugId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "temperatureCentiC",
+            "columnName": "temperatureCentiC",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "approved",
+            "columnName": "approved",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_presets_mugId",
+            "unique": false,
+            "columnNames": [
+              "mugId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_presets_mugId` ON `${TABLE_NAME}` (`mugId`)"
+          },
+          {
+            "name": "index_presets_mugId_name",
+            "unique": true,
+            "columnNames": [
+              "mugId",
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_presets_mugId_name` ON `${TABLE_NAME}` (`mugId`, `name`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "mugs",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "mugId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "mug_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `mugId` INTEGER NOT NULL, `startedAt` INTEGER NOT NULL, `endedAt` INTEGER, `endReason` TEXT, FOREIGN KEY(`mugId`) REFERENCES `mugs`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mugId",
+            "columnName": "mugId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "startedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAt",
+            "columnName": "endedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "endReason",
+            "columnName": "endReason",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_mug_sessions_mugId",
+            "unique": false,
+            "columnNames": [
+              "mugId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_mug_sessions_mugId` ON `${TABLE_NAME}` (`mugId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "mugs",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "mugId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "session_samples",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sessionId` INTEGER NOT NULL, `sampledAt` INTEGER NOT NULL, `currentCentiC` INTEGER NOT NULL, `targetCentiC` INTEGER NOT NULL, `batteryPercent` INTEGER, `maintenanceEnabled` INTEGER NOT NULL, `empty` INTEGER NOT NULL, `charging` INTEGER NOT NULL, FOREIGN KEY(`sessionId`) REFERENCES `mug_sessions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "sessionId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sampledAt",
+            "columnName": "sampledAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentCentiC",
+            "columnName": "currentCentiC",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetCentiC",
+            "columnName": "targetCentiC",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "batteryPercent",
+            "columnName": "batteryPercent",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "maintenanceEnabled",
+            "columnName": "maintenanceEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "empty",
+            "columnName": "empty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "charging",
+            "columnName": "charging",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_session_samples_sessionId",
+            "unique": false,
+            "columnNames": [
+              "sessionId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_session_samples_sessionId` ON `${TABLE_NAME}` (`sessionId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "mug_sessions",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sessionId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "latest_snapshots",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`mugId` INTEGER NOT NULL, `currentCentiC` INTEGER NOT NULL, `targetCentiC` INTEGER NOT NULL, `batteryPercent` INTEGER, `maintenanceEnabled` INTEGER NOT NULL, `empty` INTEGER NOT NULL, `charging` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`mugId`), FOREIGN KEY(`mugId`) REFERENCES `mugs`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "mugId",
+            "columnName": "mugId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentCentiC",
+            "columnName": "currentCentiC",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetCentiC",
+            "columnName": "targetCentiC",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "batteryPercent",
+            "columnName": "batteryPercent",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "maintenanceEnabled",
+            "columnName": "maintenanceEnabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "empty",
+            "columnName": "empty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "charging",
+            "columnName": "charging",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "mugId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "mugs",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "mugId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "target_choices",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `mugId` INTEGER NOT NULL, `targetCentiC` INTEGER NOT NULL, `source` TEXT NOT NULL, `presetName` TEXT, `chosenAt` INTEGER NOT NULL, `localHour` INTEGER NOT NULL, FOREIGN KEY(`mugId`) REFERENCES `mugs`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mugId",
+            "columnName": "mugId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetCentiC",
+            "columnName": "targetCentiC",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "presetName",
+            "columnName": "presetName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "chosenAt",
+            "columnName": "chosenAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localHour",
+            "columnName": "localHour",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_target_choices_mugId",
+            "unique": false,
+            "columnNames": [
+              "mugId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_target_choices_mugId` ON `${TABLE_NAME}` (`mugId`)"
+          },
+          {
+            "name": "index_target_choices_chosenAt",
+            "unique": false,
+            "columnNames": [
+              "chosenAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_target_choices_chosenAt` ON `${TABLE_NAME}` (`chosenAt`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "mugs",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "mugId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2b4db56b582971f942dd9730dc55772f')"
+    ]
+  }
+}

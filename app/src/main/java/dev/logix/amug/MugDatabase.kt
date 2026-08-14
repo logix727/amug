@@ -14,6 +14,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "mugs", indices = [Index(value = ["bleAddress"], unique = true)])
@@ -94,6 +96,21 @@ data class LatestSnapshotEntity(
     val updatedAt: Long,
 )
 
+@Entity(
+    tableName = "target_choices",
+    foreignKeys = [ForeignKey(entity = MugEntity::class, parentColumns = ["id"], childColumns = ["mugId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index("mugId"), Index("chosenAt")],
+)
+data class TargetChoiceEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val mugId: Long,
+    val targetCentiC: Int,
+    val source: String,
+    val presetName: String?,
+    val chosenAt: Long,
+    val localHour: Int,
+)
+
 @Dao
 interface MugDao {
     @Query("SELECT * FROM mugs ORDER BY lastSeenAt DESC") fun observeAll(): Flow<List<MugEntity>>
@@ -143,9 +160,16 @@ interface LatestSnapshotDao {
     @Query("SELECT * FROM latest_snapshots WHERE mugId = :mugId") suspend fun get(mugId: Long): LatestSnapshotEntity?
 }
 
+@Dao
+interface TargetChoiceDao {
+    @Insert suspend fun insert(choice: TargetChoiceEntity)
+    @Query("SELECT * FROM target_choices WHERE mugId = :mugId ORDER BY chosenAt DESC LIMIT :limit") fun observeRecent(mugId: Long, limit: Int = 100): Flow<List<TargetChoiceEntity>>
+    @Query("DELETE FROM target_choices WHERE mugId = :mugId") suspend fun clear(mugId: Long)
+}
+
 @Database(
-    entities = [MugEntity::class, MugPreferencesEntity::class, PresetEntity::class, MugSessionEntity::class, SessionSampleEntity::class, LatestSnapshotEntity::class],
-    version = 1,
+    entities = [MugEntity::class, MugPreferencesEntity::class, PresetEntity::class, MugSessionEntity::class, SessionSampleEntity::class, LatestSnapshotEntity::class, TargetChoiceEntity::class],
+    version = 2,
     exportSchema = true,
 )
 abstract class MugDatabase : RoomDatabase() {
@@ -155,11 +179,20 @@ abstract class MugDatabase : RoomDatabase() {
     abstract fun sessions(): MugSessionDao
     abstract fun samples(): SessionSampleDao
     abstract fun snapshots(): LatestSnapshotDao
+    abstract fun targetChoices(): TargetChoiceDao
 
     companion object {
         @Volatile private var instance: MugDatabase? = null
         fun get(context: Context): MugDatabase = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(context.applicationContext, MugDatabase::class.java, "amug.db").build().also { instance = it }
+            instance ?: Room.databaseBuilder(context.applicationContext, MugDatabase::class.java, "amug.db")
+                .addMigrations(MIGRATION_1_2).build().also { instance = it }
+        }
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `target_choices` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `mugId` INTEGER NOT NULL, `targetCentiC` INTEGER NOT NULL, `source` TEXT NOT NULL, `presetName` TEXT, `chosenAt` INTEGER NOT NULL, `localHour` INTEGER NOT NULL, FOREIGN KEY(`mugId`) REFERENCES `mugs`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_target_choices_mugId` ON `target_choices` (`mugId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_target_choices_chosenAt` ON `target_choices` (`chosenAt`)")
+            }
         }
     }
 }

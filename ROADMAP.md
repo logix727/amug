@@ -117,6 +117,15 @@ features, open checks, and recent raw BLE events.
 - Explainable on-device thermal trend and ETA model with confidence/staleness
   gates and no cloud dependency
 
+## Alpha 6 local learning
+
+- Room migration adds per-mug target-choice history with source and time context
+- Favorite-temperature suggestions require repeated use across multiple days
+  and at least 60% dominance; no automatic application
+- Home suggestions explain use count, day count, and time-of-day context
+- Suggestions can be applied, saved as a personal preset, or reset in Settings
+- All learning remains local, per mug, bounded to the validated temperature range
+
 ## Revision 1 — Hardware-safe controls
 
 Goal: validate each daily-use control against the real S6 Plus without unsafe

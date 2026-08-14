@@ -112,9 +112,14 @@ fun AmugApp(
     presets: List<PresetEntity>,
     sessions: List<MugSessionEntity>,
     historyRetentionDays: Int,
+    suggestion: TemperatureSuggestion?,
     scan: () -> Unit,
     connect: (MugDevice) -> Unit,
     setTemperature: (Double) -> Unit,
+    applyPreset: (PresetEntity) -> Unit,
+    applySuggestion: (TemperatureSuggestion) -> Unit,
+    saveSuggestion: (TemperatureSuggestion) -> Unit,
+    resetLearning: () -> Unit,
     setHeating: (Boolean) -> Unit,
     setGear: (Int) -> Unit,
     setUnit: (TemperatureUnit) -> Unit,
@@ -139,7 +144,7 @@ fun AmugApp(
             DiscoveryScreen(state, scan, connect) { showMugs = true }
         } else {
             ConnectedScreen(
-                state, preferences, presets, setTemperature, setHeating, setGear, setUnit,
+                state, preferences, presets, suggestion, setTemperature, applyPreset, applySuggestion, saveSuggestion, resetLearning, setHeating, setGear, setUnit,
                 setTemperatureLed, setLedColor, resetLedPalette, setSafetyWait, setMusicMode,
                 setHoldLight, setChargeLight, setSleepTimer, refresh,
             ) { showMugs = true }
@@ -159,7 +164,12 @@ private fun ConnectedScreen(
     state: BleState,
     preferences: UserPreferences,
     presets: List<PresetEntity>,
+    suggestion: TemperatureSuggestion?,
     setTemperature: (Double) -> Unit,
+    applyPreset: (PresetEntity) -> Unit,
+    applySuggestion: (TemperatureSuggestion) -> Unit,
+    saveSuggestion: (TemperatureSuggestion) -> Unit,
+    resetLearning: () -> Unit,
     setHeating: (Boolean) -> Unit,
     setGear: (Int) -> Unit,
     setUnit: (TemperatureUnit) -> Unit,
@@ -222,10 +232,10 @@ private fun ConnectedScreen(
                 }
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     if (showTechnical) TechnicalDestination(state) else when (destination) {
-                        Destination.HOME -> HomeDestination(state, preferences.unit, setTemperature, setHeating, setGear)
-                        Destination.DRINKS -> DrinksDestination(state, preferences.unit, presets, setTemperature)
+                        Destination.HOME -> HomeDestination(state, preferences.unit, suggestion, setTemperature, applySuggestion, saveSuggestion, setHeating, setGear)
+                        Destination.DRINKS -> DrinksDestination(state, preferences.unit, presets, applyPreset)
                         Destination.LIGHTING -> LightingDestination(state, preferences, setTemperatureLed, setLedColor, resetLedPalette, setMusicMode, setHoldLight, setChargeLight)
-                        Destination.SETTINGS -> SettingsDestination(state, preferences.unit, setUnit, setSafetyWait, manageMugs) { showTechnical = true }
+                        Destination.SETTINGS -> SettingsDestination(state, preferences.unit, setUnit, setSafetyWait, manageMugs, resetLearning) { showTechnical = true }
                     }
                 }
             }
@@ -254,7 +264,10 @@ private fun DestinationList(content: androidx.compose.foundation.lazy.LazyListSc
 private fun HomeDestination(
     state: BleState,
     unit: TemperatureUnit,
+    suggestion: TemperatureSuggestion?,
     setTemperature: (Double) -> Unit,
+    applySuggestion: (TemperatureSuggestion) -> Unit,
+    saveSuggestion: (TemperatureSuggestion) -> Unit,
     setHeating: (Boolean) -> Unit,
     setGear: (Int) -> Unit,
 ) {
@@ -306,6 +319,23 @@ private fun HomeDestination(
                         leadingContent = { Icon(Icons.Rounded.Info, null) },
                         colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
                     )
+                }
+            }
+        }
+        suggestion?.let { learned ->
+            item {
+                Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = RoundedCornerShape(24.dp)) {
+                    Column(Modifier.padding(20.dp)) {
+                        val celsius = learned.targetCentiC / 100.0
+                        val display = unit.display(celsius).roundToInt()
+                        Text("A temperature you often choose", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("$display${unit.symbol} ${learned.context} · ${learned.uses} uses across ${learned.distinctDays} days", color = MaterialTheme.colorScheme.onTertiaryContainer)
+                        Text("Learned locally from confirmed choices. AMUG never applies it automatically.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+                        Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { applySuggestion(learned) }, modifier = Modifier.weight(1f)) { Text("Apply") }
+                            OutlinedButton(onClick = { saveSuggestion(learned) }, modifier = Modifier.weight(1f)) { Text("Save preset") }
+                        }
+                    }
                 }
             }
         }
@@ -415,7 +445,7 @@ private val approvedFahrenheit = mapOf(
 )
 
 @Composable
-private fun DrinksDestination(state: BleState, unit: TemperatureUnit, presets: List<PresetEntity>, setTemperature: (Double) -> Unit) {
+private fun DrinksDestination(state: BleState, unit: TemperatureUnit, presets: List<PresetEntity>, applyPreset: (PresetEntity) -> Unit) {
     var selectedCategory by remember { mutableStateOf("Coffee") }
     DestinationList {
         item {
@@ -431,13 +461,13 @@ private fun DrinksDestination(state: BleState, unit: TemperatureUnit, presets: L
         }
         drinkCategories.getValue(selectedCategory).forEach { name ->
             val preset = presets.firstOrNull { it.name == name }
-            if (preset != null) item(key = preset.id) { DrinkPresetCard(preset, state.status?.targetC, unit, setTemperature) }
+            if (preset != null) item(key = preset.id) { DrinkPresetCard(preset, state.status?.targetC, unit, applyPreset) }
         }
     }
 }
 
 @Composable
-private fun DrinkPresetCard(preset: PresetEntity, currentTargetC: Double?, unit: TemperatureUnit, setTemperature: (Double) -> Unit) {
+private fun DrinkPresetCard(preset: PresetEntity, currentTargetC: Double?, unit: TemperatureUnit, applyPreset: (PresetEntity) -> Unit) {
     val celsius = preset.temperatureCentiC / 100.0
     val fahrenheit = approvedFahrenheit[preset.name] ?: (celsius * 9 / 5 + 32).roundToInt()
     val selected = currentTargetC != null && abs(currentTargetC - celsius) < .05
@@ -452,7 +482,7 @@ private fun DrinkPresetCard(preset: PresetEntity, currentTargetC: Double?, unit:
                 }
             },
             leadingContent = { Surface(shape = CircleShape, color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.size(48.dp)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Coffee, null, tint = MaterialTheme.colorScheme.onTertiaryContainer) } } },
-            trailingContent = { FilledTonalButton(onClick = { setTemperature(celsius) }, enabled = !selected, modifier = Modifier.height(48.dp)) { if (selected) Icon(Icons.Rounded.Check, "Matches target") else Text("Apply") } },
+            trailingContent = { FilledTonalButton(onClick = { applyPreset(preset) }, enabled = !selected, modifier = Modifier.height(48.dp)) { if (selected) Icon(Icons.Rounded.Check, "Matches target") else Text("Apply") } },
             colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent),
         )
     }
@@ -574,6 +604,7 @@ private fun SettingsDestination(
     setUnit: (TemperatureUnit) -> Unit,
     setSafetyWait: (Int) -> Unit,
     manageMugs: () -> Unit,
+    resetLearning: () -> Unit,
     openTechnical: () -> Unit,
 ) {
     DestinationList {
@@ -625,6 +656,9 @@ private fun SettingsDestination(
             Surface(onClick = openTechnical, color = Color.Transparent) {
                 ListItem(headlineContent = { Text("Technical & diagnostics", fontWeight = FontWeight.Bold) }, supportingContent = { Text("Protocol, firmware, validation and BLE event log") }, leadingContent = { Icon(Icons.Rounded.Info, null) }, trailingContent = { Text("Open", color = MaterialTheme.colorScheme.primary) }, colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent))
             }
+        }
+        item {
+            ListItem(headlineContent = { Text("Reset learned suggestions") }, supportingContent = { Text("Clear locally learned temperature choices for this mug") }, trailingContent = { TextButton(onClick = resetLearning) { Text("Reset") } }, colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent))
         }
     }
 }

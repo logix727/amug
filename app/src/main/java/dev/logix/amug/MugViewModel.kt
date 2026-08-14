@@ -16,7 +16,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 enum class TemperatureUnit {
     FAHRENHEIT,
@@ -45,6 +47,8 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
         preferences.selectedMugId?.let(repository::sessions) ?: flowOf(emptyList())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val globalPreferences = repository.globalPreferences.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GlobalPreferences())
+    val suggestion = repository.selectedTargetChoices.map { PreferenceLearning.suggest(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     private val mutablePreferences = MutableStateFlow(UserPreferences())
     val preferences = mutablePreferences.asStateFlow()
     private var service: MugConnectionService.LocalBinder? = null
@@ -100,7 +104,13 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
     fun disconnect() = withService { it.disconnect() }
-    fun setTemperature(celsius: Double) = withService { it.setTemperature(celsius) }
+    fun setTemperature(celsius: Double) = setTemperatureChoice(celsius, "manual", null)
+    fun applyPreset(preset: PresetEntity) = setTemperatureChoice(preset.temperatureCentiC / 100.0, "preset", preset.name)
+    fun applySuggestion(suggestion: TemperatureSuggestion) = setTemperatureChoice(suggestion.targetCentiC / 100.0, "suggestion", null)
+    private fun setTemperatureChoice(celsius: Double, source: String, presetName: String?) {
+        withService { it.setTemperature(celsius) }
+        selectedMug.value?.id?.let { mugId -> viewModelScope.launch { repository.recordTargetChoice(mugId, (celsius * 100).roundToInt(), source, presetName) } }
+    }
     fun setMaintenanceEnabled(enabled: Boolean) {
         if (enabled && mutablePreferences.value.temperatureLed) setTemperatureLed(false)
         withService { it.setMaintenanceEnabled(enabled) }
@@ -154,6 +164,12 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
         else selectedMug.value?.id?.let { id -> viewModelScope.launch { repository.clearHistory(id) } }
     }
     fun setHistoryRetention(days: Int) = viewModelScope.launch { repository.setHistoryRetention(days); repository.pruneHistory() }
+    fun saveSuggestionAsPreset(suggestion: TemperatureSuggestion) {
+        val mugId = selectedMug.value?.id ?: return
+        val fahrenheit = ((suggestion.targetCentiC / 100.0) * 9 / 5 + 32).roundToInt()
+        viewModelScope.launch { repository.savePersonalPreset(mugId, "My $fahrenheit°F", suggestion.targetCentiC) }
+    }
+    fun resetLearning() { selectedMug.value?.id?.let { id -> viewModelScope.launch { repository.clearLearning(id) } } }
 
     private fun saveCurrentMugPreferences(preferences: UserPreferences) {
         val mugId = selectedMug.value?.id ?: return

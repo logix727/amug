@@ -190,7 +190,15 @@ content; protocol and roadmap details remain visible in Technical.
 - Centered Home hero and reduced card density
 - Local temperature trend and ETA insights after sufficient stable telemetry
 - No cloud AI, analytics, or ML runtime; estimates are explainable and hidden
-  when freshness/confidence/safety gates fail
+when freshness/confidence/safety gates fail
+
+### v0.2 alpha 6
+
+- Learns confirmed target choices per mug and broad time-of-day context
+- Suggests only after repeated use across at least three days with a dominant
+  preference; never applies temperatures automatically
+- Suggestions can be applied or saved as personal presets and reset locally
+- Room schema migration preserves existing mugs, history, settings, and presets
 
 ## Status
 

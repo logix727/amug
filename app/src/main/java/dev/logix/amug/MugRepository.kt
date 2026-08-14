@@ -49,6 +49,9 @@ class MugRepository(private val context: Context) {
     val selectedPresets: Flow<List<PresetEntity>> = globalPreferences.flatMapLatest { prefs ->
         prefs.selectedMugId?.let(db.presets()::observe) ?: flowOf(emptyList())
     }
+    val selectedTargetChoices: Flow<List<TargetChoiceEntity>> = globalPreferences.flatMapLatest { prefs ->
+        prefs.selectedMugId?.let { db.targetChoices().observeRecent(it) } ?: flowOf(emptyList())
+    }
 
     suspend fun migrateLegacyPreferences() {
         migrationMutex.withLock {
@@ -105,6 +108,12 @@ class MugRepository(private val context: Context) {
     fun presets(mugId: Long) = db.presets().observe(mugId)
     suspend fun savePreset(preset: PresetEntity) = db.presets().upsert(preset.copy(temperatureCentiC = preset.temperatureCentiC.coerceIn(4800, 6600)))
     suspend fun deletePreset(id: Long) = db.presets().delete(id)
+    suspend fun savePersonalPreset(mugId: Long, name: String, centiC: Int) = db.presets().upsert(PresetEntity(mugId = mugId, name = name, temperatureCentiC = centiC.coerceIn(4800, 6600), approved = false))
+    suspend fun recordTargetChoice(mugId: Long, centiC: Int, source: String, presetName: String?, chosenAt: Long = System.currentTimeMillis()) {
+        val hour = java.time.Instant.ofEpochMilli(chosenAt).atZone(java.time.ZoneId.systemDefault()).hour
+        db.targetChoices().insert(TargetChoiceEntity(mugId = mugId, targetCentiC = centiC.coerceIn(4800, 6600), source = source, presetName = presetName, chosenAt = chosenAt, localHour = hour))
+    }
+    suspend fun clearLearning(mugId: Long) = db.targetChoices().clear(mugId)
     suspend fun latestSnapshot(mugId: Long) = db.snapshots().get(mugId)
     fun observeLatestSnapshot(mugId: Long) = db.snapshots().observe(mugId)
     suspend fun saveLatestSnapshot(mugId: Long, status: MugStatus, updatedAt: Long) = db.snapshots().upsert(status.toSnapshot(mugId, updatedAt))
