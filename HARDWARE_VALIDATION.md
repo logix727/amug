@@ -50,6 +50,43 @@ Intel BLE adapter was confirmed working against nearby BLE devices, but the mug
 was not advertising during the validation window (asleep or still owned by the
 Pixel's single BLE connection).
 
+## Direct Windows BLE validation — August 14, 2026
+
+The mug later advertised as `S6-PLUS-0455` at address `4A:4D:04:00:04:55` and
+was tested directly through the PC's Intel BLE adapter.
+
+Verified GATT profile:
+
+- Service: `A3000000-0000-0000-0000-000000000000`
+- Notify/read: `A3020000-0000-0000-0000-000000000000`
+- Write/write-with-response: `A3010000-0000-0000-0000-000000000000`
+- OTA notify/read/write-without-response: `A3030000-0000-0000-0000-000000000000`
+
+Read-only baseline:
+
+- Current temperature: 54.44°C / 130.0°F
+- Target temperature: 54.44°C / 130.0°F
+- Empty: false
+- Charging: true
+- Battery: 100%
+- Firmware auto-off: 2 hours
+- RGB readback: `#FFD100`
+- Night light: off
+
+Reversible physical write/readback tests:
+
+- Setpoint changed 130°F → 131°F and status confirmed 55.00°C.
+- Setpoint restored 131°F → 130°F and status confirmed 54.44°C.
+- Auto-off changed 2h → 4h and readback confirmed byte 7 = 4.
+- Auto-off restored 4h → 2h and readback confirmed byte 7 = 2.
+- Hold-light setting changed off → on → off with status confirmation.
+- Charge-light setting changed off → on → off with status confirmation.
+
+No ambient/night-light test was performed while coffee was being held because
+the firmware intentionally disables temperature hold when night light is on.
+The scripts used are `tools/validate_setpoint.py` and
+`tools/validate_settings.py`.
+
 Protocol research confirms the S6 Plus firmware automatically disables
 temperature hold when night-light mode is enabled. AMUG therefore presents
 temperature glow as an explicit ambient mode and never enables it silently.

@@ -82,6 +82,12 @@ This alpha requires renewed physical validation before issues #1, #4, #5, and
 Alpha 2 remains a prerelease because the mug must be awake, advertising, and
 released by the Pixel before Windows can run physical command/readback tests.
 
+Direct Windows BLE validation is now complete for status/version discovery,
+exact setpoint change/restoration, firmware 2/4-hour auto-off, hold light, and
+charge light. Remaining physical checks are Android alpha 2 lifecycle/reconnect,
+music effects, ambient mode while hold is deliberately off, notifications,
+tile, and widget.
+
 ## Revision 1 — Hardware-safe controls
 
 Goal: validate each daily-use control against the real S6 Plus without unsafe
