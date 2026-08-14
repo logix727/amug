@@ -139,6 +139,18 @@ a separate controlled preparation and cooling process.
 - Quick Settings/widget data discloses freshness and never implies cached data
   is live.
 
+## Material information architecture
+
+- **Home:** live current/target temperature, hold, battery/charging, exact target
+  controls, safety warnings, command confirmation, and daily timer.
+- **Drinks:** grouped Coffee, Tea, and Other preset catalog. Preset values are
+  explicitly holding/drinking temperatures, not brewing instructions.
+- **Lighting:** temperature ambient mode/palette, music effects, hold light, and
+  charge light with firmware conflicts explained.
+- **Settings:** units, firmware auto-off, phone timer, device manager, history.
+- **Technical:** firmware/hardware, UUIDs, status flags, physical validation,
+  roadmap, and bounded raw BLE event console.
+
 ## Sources
 
 - Ember Mug 2: https://ember.com/products/ember-mug-2

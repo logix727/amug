@@ -175,6 +175,14 @@ The debug APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
   Google Home Cloud-to-cloud integration. A phone-only Google Home relay is not
   technically or policy compliant.
 
+### v0.2 alpha 4 Material redesign
+
+The connected app is no longer one long engineering settings page. It uses a
+Pixel-style Material 3 shell with Home, Drinks, Lighting, Settings, and
+Technical destinations. Coffee/tea/other presets include canonical °F/°C
+holding temperatures and descriptions; live temperature remains the first Home
+content; protocol and roadmap details remain visible in Technical.
+
 ## Status
 
 - [x] BLE protocol extracted and documented

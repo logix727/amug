@@ -93,6 +93,20 @@ readback confirmation, and demonstrates a physical heating trend. The in-app
 Technical & Roadmap console exposes UUIDs, protocol commands, flags, validated
 features, open checks, and recent raw BLE events.
 
+## Alpha 4 Material redesign
+
+- Five stable Material destinations: Home, Drinks, Lighting, Settings, Technical
+- Compact bottom NavigationBar and wide-window NavigationRail
+- Home prioritizes live temperature, target, hold, battery, and command status
+- Drinks groups Coffee, Tea, and Other presets with recommended Fahrenheit and
+  Celsius temperatures plus concise use guidance
+- Lighting contains ambient palette, music effects, hold and charging lights
+- Settings contains units, firmware auto-off, timers, mug management and history
+- Technical exposes device/version, exact GATT UUIDs, decoded flags, validated
+  command matrix, roadmap status, and recent raw TX/RX events
+- Dynamic Material You colors, semantic surfaces, standard list/card/segmented
+  components, 48dp targets, and non-color-only selected/warning states
+
 ## Revision 1 — Hardware-safe controls
 
 Goal: validate each daily-use control against the real S6 Plus without unsafe
