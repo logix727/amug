@@ -46,3 +46,11 @@
 - Perform TalkBack/switch-access session with a human tester.
 - Use several days of real history to validate learned suggestion UX and ETA calibration.
 - Replace debug signing with protected release signing before public stable distribution.
+
+## RC2 additions
+
+- Phone-supervised timer expanded to 5–120 minutes in 5-minute increments.
+- Firmware 2/4-hour selection clarified as the separate hardware failsafe.
+- Automatic firmware-empty safety-off plus manual empty override.
+- Manual override physically validated through `0601` hold on, `0600` safety
+  stop and `03` readback confirming hold off.

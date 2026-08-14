@@ -214,6 +214,10 @@ presets, opt-in alert settings, visible sleep timer, reconnect/disconnect,
 diagnostics clear/share, Bluetooth-off recovery, and the physically validated
 lighting matrix. See [RC1_VALIDATION.md](RC1_VALIDATION.md).
 
+Timer behavior: the S6 Plus firmware exposes verified 2-hour and 4-hour
+failsafes. AMUG separately provides a phone-supervised 5–120 minute timer in
+5-minute increments for shorter sessions.
+
 ## Status
 
 - [x] BLE protocol extracted and documented

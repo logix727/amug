@@ -119,6 +119,10 @@ object MugProtocol {
 
     fun setS6PlusGear(gear: Int) = byteArrayOf(0x06, gear.coerceIn(0, 3).toByte())
     fun setS6Gear(gear: Int) = byteArrayOf(0x05, gear.coerceIn(0, 3).toByte())
+    fun safetyOff(profile: MugProfile) = when (profile) {
+        MugProfile.S6_PLUS -> byteArrayOf(0x06, 0x00)
+        MugProfile.S6 -> byteArrayOf(0x0A, 0x00)
+    }
     fun setSafetyWait(hours: Int): ByteArray {
         require(hours == 2 || hours == 4)
         return byteArrayOf(0x05, hours.toByte())

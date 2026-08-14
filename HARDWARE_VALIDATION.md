@@ -111,6 +111,24 @@ Pixel 10 Pro XL alpha 3 results:
 Alpha 3 also emits the bounded protocol stream to Logcat under `AMUG-BLE` and
 shows the same TX/RX data in its Technical & Roadmap console.
 
+## RC2 empty-mug safety validation
+
+The physically empty mug did not assert its firmware empty bit immediately, so
+AMUG cannot rely solely on that sensor. RC2 adds a manual `Mug is empty · stop
+heat now` action in Home.
+
+Validation:
+
+- Hold deliberately enabled with `0601`; status confirmed flags `0x11`.
+- Manual empty override sent `0600`.
+- Immediate command echo remained stale at `0601`, as seen elsewhere.
+- AMUG correctly queried `03` and confirmed flags `0x10` (charging, hold off).
+- The safety stop is therefore verified by authoritative status readback.
+
+When firmware does assert `empty=true`, AMUG also sends the same safety-off
+command automatically, cancels queued non-safety writes and phone timers, and
+does not auto-resume when liquid returns.
+
 Protocol research confirms the S6 Plus firmware automatically disables
 temperature hold when night-light mode is enabled. AMUG therefore presents
 temperature glow as an explicit ambient mode and never enables it silently.

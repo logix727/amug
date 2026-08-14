@@ -146,6 +146,14 @@ features, open checks, and recent raw BLE events.
 - Full physical music/ambient lighting matrix validated and restored
 - Pixel tile, background, rotation, reconnect, ANR, and service checks complete
 
+## 0.3.0 RC2
+
+- AMUG timer expanded to 5–120 minutes in 5-minute increments
+- Quick choices remain for 15/30/60/120 minutes
+- Firmware 2/4-hour setting relabeled as the separate hardware failsafe
+- Firmware empty transition now triggers an additional verified AMUG hold-off,
+  cancels phone timers, and never auto-resumes
+
 ## Revision 1 — Hardware-safe controls
 
 Goal: validate each daily-use control against the real S6 Plus without unsafe

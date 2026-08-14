@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
                     savePersonalPreset = viewModel::savePersonalPreset,
                     deletePersonalPreset = viewModel::deletePersonalPreset,
                     setHeating = viewModel::setMaintenanceEnabled,
+                    safetyStop = viewModel::safetyStop,
                     setGear = viewModel::setGear,
                     setUnit = viewModel::setUnit,
                     setTemperatureLed = viewModel::setTemperatureLed,

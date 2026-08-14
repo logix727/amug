@@ -136,6 +136,7 @@ class MugViewModel(application: Application) : AndroidViewModel(application) {
         if (enabled && mutablePreferences.value.temperatureLed) setTemperatureLed(false)
         withService { it.setMaintenanceEnabled(enabled) }
     }
+    fun safetyStop() = withService { it.safetyStop() }
     fun setGear(gear: Int) = withService { it.setGear(gear) }
     fun setUnit(unit: TemperatureUnit) {
         mutablePreferences.value = mutablePreferences.value.copy(unit = unit)

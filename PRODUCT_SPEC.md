@@ -70,7 +70,9 @@ a separate controlled preparation and cooling process.
 6. **Fast reconnect:** remember the last mug and reconcile actual state on open.
 7. **Reliable GATT queue:** stage timeouts, bounded retry, fresh GATT after
    transport failure, and superseded slider commands.
-8. **Empty-state interlock:** disable heat actions when firmware reports empty.
+8. **Empty-state interlock:** disable heat actions and send a readback-confirmed
+   hold-off command on the transition to firmware-reported empty. Cancel active
+   phone timers and never auto-resume when liquid returns.
 9. **Contradictory-state guard:** suspend automations on impossible state combos.
 10. **Temperature glow / ambient mode:** physical LED maps measured temperature across six
     visible, named temperature anchors. Every color is editable with live
@@ -94,8 +96,8 @@ a separate controlled preparation and cooling process.
 
 ### P1 — Revision 2
 
-21. **Sleep/hold timer:** 15/30/60/120 minutes; firmware-enforced where proven,
-    otherwise visibly best-effort.
+21. **Sleep/hold timer:** phone-supervised 5–120 minutes in 5-minute increments;
+    separate firmware-backed hardware failsafe at the verified 2/4-hour values.
 22. **Unattended hold limit:** expose and validate VSITOO safety-wait semantics.
 23. **Lighting studio:** RGB, night light, hold/charge lights, music modes, and
     restoring temperature glow.

@@ -44,6 +44,7 @@ class MugConnectionService : Service() {
         fun disconnect() = client.disconnect()
         fun setTemperature(celsius: Double) = client.setTemperature(celsius)
         fun setMaintenanceEnabled(enabled: Boolean) = client.setMaintenanceEnabled(enabled)
+        fun safetyStop() = client.safetyStop()
         fun setGear(gear: Int) = client.setGear(gear)
         fun setAmbientTemperatureMode(enabled: Boolean) = client.setAmbientTemperatureMode(enabled)
         fun setTemperatureLedPalette(palette: List<LedColorStop>) = client.setTemperatureLedPalette(palette)
@@ -338,6 +339,7 @@ class MugConnectionService : Service() {
         val hot = (status?.currentC ?: 0.0) >= 60.0
         if (ready && !previousReady && alertPreferences.readyAlert) alert(ALERT_READY, "Your drink is ready", "${fahrenheit(status!!.currentC)}°F and holding")
         if (empty && !previousEmpty && alertPreferences.emptyAlert) alert(ALERT_EMPTY, "Mug is empty", "Temperature hold is unavailable until liquid is added")
+        if (empty && !previousEmpty) setSleepTimer(null)
         if (lowBattery && !previousLowBattery && alertPreferences.lowBatteryAlert) alert(ALERT_BATTERY, "Mug battery is low", "${status?.batteryPercent}% remaining")
         if (state.stage == ConnectionStage.RECONNECTING && previousStage == ConnectionStage.READY && alertPreferences.disconnectAlert) alert(ALERT_CONNECTION, "Mug connection lost", "AMUG is trying to reconnect")
         if (hot && !previousHot && alertPreferences.hotAlert) alert(ALERT_HOT, "Drink is very hot", "${fahrenheit(status!!.currentC)}°F · sip carefully")

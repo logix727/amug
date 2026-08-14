@@ -91,6 +91,8 @@ class MugBleClient(
     private var temperatureLedPalette = MugProtocol.defaultLedPalette
     private var lastTemperatureColor: Int? = null
     private var polling: Runnable? = null
+    private var previousEmpty = false
+    private var emptyShutdownPending = false
     private val found = linkedMapOf<String, MugDevice>()
     private val adapterReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -271,6 +273,14 @@ class MugBleClient(
         }))
     }
 
+    fun safetyStop() = handler.post {
+        val currentProfile = profile ?: return@post
+        writes.clear()
+        awaitingVerification = null
+        cancelVerificationTimeout()
+        enqueueFirst(QueuedWrite(MugProtocol.safetyOff(currentProfile), "Manual safety stop", verify = { !it.maintenanceEnabled }))
+    }
+
     fun setGear(gear: Int) = handler.post {
         val current = state.status ?: return@post
         if (current.empty) return@post
@@ -448,6 +458,17 @@ class MugBleClient(
         reconnectAttempts = 0
         val point = TelemetryPoint(now, status.currentC, status.targetC, status.maintenanceEnabled, status.empty, status.batteryPercent, status.charging)
         update(state.copy(status = status, stage = ConnectionStage.READY, lastUpdatedAt = now, telemetry = (state.telemetry + point).takeLast(20), error = null))
+        if (status.empty && !previousEmpty && status.maintenanceEnabled && !emptyShutdownPending) {
+            emptyShutdownPending = true
+            log("Safety: empty detected; forcing temperature hold off")
+            writes.clear()
+            awaitingVerification = null
+            cancelVerificationTimeout()
+            val currentProfile = profile
+            if (currentProfile != null) enqueueFirst(QueuedWrite(MugProtocol.safetyOff(currentProfile), "Safety stop: mug empty", verify = { !it.maintenanceEnabled }))
+        }
+        if (!status.maintenanceEnabled) emptyShutdownPending = false
+        previousEmpty = status.empty
         schedulePoll()
         awaitingVerification?.let { pending ->
             if (pending.verify?.invoke(status) == true) {
@@ -573,6 +594,7 @@ class MugBleClient(
         activeWrite = null
         awaitingVerification = null
         lastTemperatureColor = null
+        emptyShutdownPending = false
         polling?.let(handler::removeCallbacks)
         polling = null
     }

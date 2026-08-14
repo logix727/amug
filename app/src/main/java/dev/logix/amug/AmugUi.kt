@@ -123,6 +123,7 @@ fun AmugApp(
     savePersonalPreset: (String, Double) -> Unit,
     deletePersonalPreset: (Long) -> Unit,
     setHeating: (Boolean) -> Unit,
+    safetyStop: () -> Unit,
     setGear: (Int) -> Unit,
     setUnit: (TemperatureUnit) -> Unit,
     setTemperatureLed: (Boolean) -> Unit,
@@ -152,7 +153,7 @@ fun AmugApp(
             DiscoveryScreen(state, scan, connect) { showMugs = true }
         } else {
             ConnectedScreen(
-                state, preferences, presets, suggestion, setTemperature, applyPreset, applySuggestion, saveSuggestion, resetLearning, savePersonalPreset, deletePersonalPreset, setHeating, setGear, setUnit,
+                state, preferences, presets, suggestion, setTemperature, applyPreset, applySuggestion, saveSuggestion, resetLearning, savePersonalPreset, deletePersonalPreset, setHeating, safetyStop, setGear, setUnit,
                 setTemperatureLed, setLedColor, resetLedPalette, setSafetyWait, setMusicMode,
                 setHoldLight, setChargeLight, setSleepTimer, alertPreferences, setAlert, refresh, reconnect, disconnect, clearEvents, exportDiagnostics,
             ) { showMugs = true }
@@ -181,6 +182,7 @@ private fun ConnectedScreen(
     savePersonalPreset: (String, Double) -> Unit,
     deletePersonalPreset: (Long) -> Unit,
     setHeating: (Boolean) -> Unit,
+    safetyStop: () -> Unit,
     setGear: (Int) -> Unit,
     setUnit: (TemperatureUnit) -> Unit,
     setTemperatureLed: (Boolean) -> Unit,
@@ -248,7 +250,7 @@ private fun ConnectedScreen(
                 }
                 Box(Modifier.weight(1f).fillMaxHeight()) {
                     if (showTechnical) TechnicalDestination(state, clearEvents, exportDiagnostics) else when (destination) {
-                        Destination.HOME -> HomeDestination(state, preferences.unit, suggestion, setTemperature, applySuggestion, saveSuggestion, setHeating, setGear, setSleepTimer)
+                        Destination.HOME -> HomeDestination(state, preferences.unit, suggestion, setTemperature, applySuggestion, saveSuggestion, setHeating, safetyStop, setGear, setSleepTimer)
                         Destination.DRINKS -> DrinksDestination(state, preferences.unit, presets, applyPreset, savePersonalPreset, deletePersonalPreset)
                         Destination.LIGHTING -> LightingDestination(state, preferences, setTemperatureLed, setLedColor, resetLedPalette, setMusicMode, setHoldLight, setChargeLight)
                         Destination.SETTINGS -> SettingsDestination(state, preferences.unit, setUnit, setSafetyWait, manageMugs, resetLearning, alertPreferences, setAlert, reconnect, disconnect) { showTechnical = true }
@@ -285,6 +287,7 @@ private fun HomeDestination(
     applySuggestion: (TemperatureSuggestion) -> Unit,
     saveSuggestion: (TemperatureSuggestion) -> Unit,
     setHeating: (Boolean) -> Unit,
+    safetyStop: () -> Unit,
     setGear: (Int) -> Unit,
     setSleepTimer: (Int?) -> Unit,
 ) {
@@ -324,6 +327,7 @@ private fun HomeDestination(
                         }
                         Switch(checked = status?.maintenanceEnabled == true, enabled = status != null && !status.empty && !status.nightLightEnabled, onCheckedChange = setHeating, modifier = Modifier.semantics { contentDescription = "Temperature hold" })
                     }
+                    OutlinedButton(onClick = safetyStop, enabled = status?.maintenanceEnabled == true, modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(48.dp), colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Mug is empty · stop heat now") }
                 }
             }
         }
@@ -336,12 +340,12 @@ private fun HomeDestination(
             }
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf(15, 30, 60, 120).forEach { minutes ->
-                    FilterChip(selected = false, onClick = { setSleepTimer(minutes) }, label = { Text(if (minutes < 60) "$minutes m" else "2 h") }, enabled = status != null, modifier = Modifier.weight(1f))
+                    FilterChip(selected = false, onClick = { setSleepTimer(minutes) }, label = { Text(if (minutes <= 60) "$minutes m" else "2 h") }, enabled = status != null, modifier = Modifier.weight(1f))
                 }
             }
             if (state.sleepTimerEndsAt != null) TextButton(onClick = { setSleepTimer(null) }) { Text("Cancel timer") }
         }
-        if (status?.empty == true) item { WarningCard("Mug empty", "Temperature hold stopped. Add liquid before turning hold on.") }
+        if (status?.empty == true) item { WarningCard("Mug empty", "AMUG sent a verified safety-off command. Add liquid before turning hold on again.") }
         if (status?.nightLightEnabled == true) item { WarningCard("Lighting is active", "Ambient lighting and temperature hold cannot run together.") }
         insight?.let { smart ->
             item {
@@ -707,7 +711,7 @@ private fun SettingsDestination(
         item { Text("Safety", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) }
         if (state.profile == MugProfile.S6_PLUS) item {
             Column {
-                ListItem(headlineContent = { Text("Firmware auto-off") }, supportingContent = { Text("Stored by mug firmware · physically validated") }, colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent))
+                ListItem(headlineContent = { Text("Hardware failsafe") }, supportingContent = { Text("The mug firmware only exposes 2 or 4 hours. Use the 5–120 minute AMUG timer on Home for shorter intervals.") }, colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Color.Transparent))
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(2, 4).forEach { hours ->
                         val selected = state.status?.safetyWaitHours == hours
